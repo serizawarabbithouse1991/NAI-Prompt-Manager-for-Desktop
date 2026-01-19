@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/models.dart';
-import '../data/database/database.dart' hide Folder, Tag, ImageRating, Prompt;
-import 'database_provider.dart';
+import '../data/repositories/repositories.dart';
+import 'repository_providers.dart';
 
 /// 画像リストの状態
 class ImageListState {
@@ -42,9 +42,9 @@ class ImageListState {
 
 /// 画像リストのNotifier
 class ImageListNotifier extends StateNotifier<ImageListState> {
-  final AppDatabase _db;
+  final ImageRepository _repository;
 
-  ImageListNotifier(this._db) : super(const ImageListState());
+  ImageListNotifier(this._repository) : super(const ImageListState());
 
   /// 画像を読み込む
   Future<void> loadImages([ImageFilter? filter]) async {
@@ -56,7 +56,11 @@ class ImageListNotifier extends StateNotifier<ImageListState> {
     );
 
     try {
-      final result = await _getImagesWithPagination(newFilter, 0, defaultPageSize);
+      final result = await _repository.getImages(
+        filter: newFilter,
+        offset: 0,
+        limit: defaultPageSize,
+      );
       state = state.copyWith(
         images: result.images,
         pagination: PaginationState(
@@ -215,8 +219,8 @@ class ImageListNotifier extends StateNotifier<ImageListState> {
 /// 画像リストのプロバイダー
 final imageListProvider =
     StateNotifierProvider<ImageListNotifier, ImageListState>((ref) {
-  final db = ref.watch(databaseProvider);
-  return ImageListNotifier(db);
+  final repository = ref.watch(imageRepositoryProvider);
+  return ImageListNotifier(repository);
 });
 
 /// 選択中の画像IDリスト

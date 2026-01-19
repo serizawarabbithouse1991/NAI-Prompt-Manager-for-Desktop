@@ -1,7 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import '../data/models/models.dart';
-import '../data/database/database.dart' hide Folder, Tag, ImageRating, Prompt;
-import 'database_provider.dart';
+import '../data/repositories/repositories.dart';
+import 'repository_providers.dart';
 
 /// タグリストの状態
 class TagListState {
@@ -34,17 +35,17 @@ class TagListState {
 
 /// タグリストのNotifier
 class TagListNotifier extends StateNotifier<TagListState> {
-  final AppDatabase _db;
+  final TagRepository _repository;
+  static const _uuid = Uuid();
 
-  TagListNotifier(this._db) : super(const TagListState());
+  TagListNotifier(this._repository) : super(const TagListState());
 
   /// タグを読み込む
   Future<void> loadTags() async {
     state = state.copyWith(loading: true, error: null);
 
     try {
-      // TODO: DBからタグを取得
-      final tags = <Tag>[];
+      final tags = await _repository.getAllTags();
 
       state = state.copyWith(
         tags: tags,
@@ -64,12 +65,10 @@ class TagListNotifier extends StateNotifier<TagListState> {
     String? color,
   }) async {
     try {
-      // TODO: DBにタグを作成
-      final newTag = Tag(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
+      final newTag = await _repository.createTag(
+        id: _uuid.v4(),
         name: name,
         color: color,
-        createdAt: DateTime.now(),
       );
 
       state = state.copyWith(tags: [...state.tags, newTag]);
@@ -83,7 +82,8 @@ class TagListNotifier extends StateNotifier<TagListState> {
   /// タグを更新
   Future<void> updateTag(String id, {String? name, String? color}) async {
     try {
-      // TODO: DBのタグを更新
+      await _repository.updateTag(id, name: name, color: color);
+      
       state = state.copyWith(
         tags: state.tags.map((t) {
           if (t.id == id) {
@@ -100,7 +100,8 @@ class TagListNotifier extends StateNotifier<TagListState> {
   /// タグを削除
   Future<void> deleteTag(String id) async {
     try {
-      // TODO: DBからタグを削除
+      await _repository.deleteTag(id);
+      
       state = state.copyWith(
         tags: state.tags.where((t) => t.id != id).toList(),
         selectedTagIds: state.selectedTagIds.difference({id}),
@@ -140,13 +141,18 @@ class TagListNotifier extends StateNotifier<TagListState> {
     final newTag = await createTag(name: name, color: color);
     return newTag!;
   }
+
+  /// タグを検索
+  Future<List<Tag>> searchTags(String query) async {
+    return _repository.searchTags(query);
+  }
 }
 
 /// タグリストのプロバイダー
 final tagListProvider =
     StateNotifierProvider<TagListNotifier, TagListState>((ref) {
-  final db = ref.watch(databaseProvider);
-  return TagListNotifier(db);
+  final repository = ref.watch(tagRepositoryProvider);
+  return TagListNotifier(repository);
 });
 
 /// 選択中のタグリスト

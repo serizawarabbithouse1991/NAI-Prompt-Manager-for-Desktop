@@ -1,7 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/models.dart';
-import '../data/database/database.dart' hide Folder, Tag, ImageRating, Prompt;
-import 'database_provider.dart';
 
 /// アプリケーション設定の状態
 class AppSettingsState {
@@ -38,9 +36,7 @@ class AppSettingsState {
 
 /// アプリケーション設定のNotifier
 class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
-  final AppDatabase _db;
-
-  AppSettingsNotifier(this._db) : super(const AppSettingsState());
+  AppSettingsNotifier() : super(const AppSettingsState());
 
   /// 設定を読み込む
   Future<void> loadSettings() async {
@@ -129,8 +125,7 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
 /// アプリケーション設定のプロバイダー
 final appSettingsProvider =
     StateNotifierProvider<AppSettingsNotifier, AppSettingsState>((ref) {
-  final db = ref.watch(databaseProvider);
-  return AppSettingsNotifier(db);
+  return AppSettingsNotifier();
 });
 
 /// 表示モードのショートカットプロバイダー

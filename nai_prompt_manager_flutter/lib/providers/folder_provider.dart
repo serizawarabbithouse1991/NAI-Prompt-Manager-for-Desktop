@@ -1,7 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import '../data/models/models.dart';
-import '../data/database/database.dart' hide Folder, Tag, ImageRating, Prompt;
-import 'database_provider.dart';
+import '../data/repositories/repositories.dart';
+import 'repository_providers.dart';
 
 /// フォルダリストの状態
 class FolderListState {
@@ -38,18 +39,18 @@ class FolderListState {
 
 /// フォルダリストのNotifier
 class FolderListNotifier extends StateNotifier<FolderListState> {
-  final AppDatabase _db;
+  final FolderRepository _repository;
+  static const _uuid = Uuid();
 
-  FolderListNotifier(this._db) : super(const FolderListState());
+  FolderListNotifier(this._repository) : super(const FolderListState());
 
   /// フォルダを読み込む
   Future<void> loadFolders() async {
     state = state.copyWith(loading: true, error: null);
 
     try {
-      // TODO: DBからフォルダを取得
-      final folders = <Folder>[];
-      final tree = _buildFolderTree(folders);
+      final folders = await _repository.getAllFolders();
+      final tree = await _repository.buildFolderTree();
 
       state = state.copyWith(
         folders: folders,
@@ -76,20 +77,21 @@ class FolderListNotifier extends StateNotifier<FolderListState> {
     String? color,
   }) async {
     try {
-      // TODO: DBにフォルダを作成
-      final newFolder = Folder(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        parentId: parentId,
+      final newFolder = await _repository.createFolder(
+        id: _uuid.v4(),
         name: name,
+        parentId: parentId,
         color: color,
         sortOrder: state.folders.length,
-        createdAt: DateTime.now(),
       );
 
       state = state.copyWith(
         folders: [...state.folders, newFolder],
-        folderTree: _buildFolderTree([...state.folders, newFolder]),
       );
+      
+      // ツリーを再構築
+      final tree = await _repository.buildFolderTree();
+      state = state.copyWith(folderTree: tree);
 
       return newFolder;
     } catch (e) {
@@ -101,7 +103,8 @@ class FolderListNotifier extends StateNotifier<FolderListState> {
   /// フォルダを更新
   Future<void> updateFolder(String id, {String? name, String? color}) async {
     try {
-      // TODO: DBのフォルダを更新
+      await _repository.updateFolder(id, name: name, color: color);
+      
       state = state.copyWith(
         folders: state.folders.map((f) {
           if (f.id == id) {
@@ -110,7 +113,9 @@ class FolderListNotifier extends StateNotifier<FolderListState> {
           return f;
         }).toList(),
       );
-      state = state.copyWith(folderTree: _buildFolderTree(state.folders));
+      
+      final tree = await _repository.buildFolderTree();
+      state = state.copyWith(folderTree: tree);
     } catch (e) {
       state = state.copyWith(error: e.toString());
     }
@@ -119,11 +124,14 @@ class FolderListNotifier extends StateNotifier<FolderListState> {
   /// フォルダを削除
   Future<void> deleteFolder(String id) async {
     try {
-      // TODO: DBからフォルダを削除
+      await _repository.deleteFolder(id);
+      
       final newFolders = state.folders.where((f) => f.id != id).toList();
+      final tree = await _repository.buildFolderTree();
+      
       state = state.copyWith(
         folders: newFolders,
-        folderTree: _buildFolderTree(newFolders),
+        folderTree: tree,
       );
 
       if (state.selectedFolderId == id) {
@@ -133,35 +141,13 @@ class FolderListNotifier extends StateNotifier<FolderListState> {
       state = state.copyWith(error: e.toString());
     }
   }
-
-  /// フラットなフォルダリストからツリー構造を構築
-  List<FolderWithChildren> _buildFolderTree(List<Folder> folders) {
-    final Map<String?, List<Folder>> grouped = {};
-    for (final folder in folders) {
-      grouped.putIfAbsent(folder.parentId, () => []);
-      grouped[folder.parentId]!.add(folder);
-    }
-
-    List<FolderWithChildren> buildChildren(String? parentId) {
-      final children = grouped[parentId] ?? [];
-      return children.map((folder) {
-        return FolderWithChildren.fromFolder(
-          folder,
-          children: buildChildren(folder.id),
-        );
-      }).toList()
-        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    }
-
-    return buildChildren(null);
-  }
 }
 
 /// フォルダリストのプロバイダー
 final folderListProvider =
     StateNotifierProvider<FolderListNotifier, FolderListState>((ref) {
-  final db = ref.watch(databaseProvider);
-  return FolderListNotifier(db);
+  final repository = ref.watch(folderRepositoryProvider);
+  return FolderListNotifier(repository);
 });
 
 /// 選択中のフォルダ

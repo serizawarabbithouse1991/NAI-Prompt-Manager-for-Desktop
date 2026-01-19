@@ -1,4 +1,4 @@
 /// Services for NAI Prompt Manager
-library services;
+library;
 
 export 'png_metadata_service.dart';

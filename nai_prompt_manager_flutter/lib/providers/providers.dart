@@ -1,7 +1,8 @@
 /// Riverpod Providers for NAI Prompt Manager
-library providers;
+library;
 
 export 'database_provider.dart';
+export 'repository_providers.dart';
 export 'image_provider.dart';
 export 'folder_provider.dart';
 export 'tag_provider.dart';
