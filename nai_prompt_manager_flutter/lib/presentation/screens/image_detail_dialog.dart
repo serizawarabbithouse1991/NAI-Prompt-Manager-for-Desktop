@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
@@ -266,11 +268,17 @@ class _ImageDetailDialogState extends ConsumerState<ImageDetailDialog> {
               ),
             ),
             const Spacer(),
-            IconButton(
-              icon: Icon(FluentIcons.copy, size: 12, color: NaiTheme.text2),
-              onPressed: () {
-                // TODO: クリップボードにコピー
-              },
+            Tooltip(
+              message: 'クリップボードにコピー',
+              child: IconButton(
+                icon: Icon(FluentIcons.copy, size: 12, color: NaiTheme.text2),
+                onPressed: () {
+                  if (content.isNotEmpty) {
+                    Clipboard.setData(ClipboardData(text: content));
+                    _showCopyNotification('コピーしました');
+                  }
+                },
+              ),
             ),
           ],
         ),
@@ -291,6 +299,17 @@ class _ImageDetailDialogState extends ConsumerState<ImageDetailDialog> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showCopyNotification(String message) {
+    displayInfoBar(
+      context,
+      builder: (context, close) => InfoBar(
+        title: Text(message),
+        severity: InfoBarSeverity.success,
+      ),
+      duration: const Duration(seconds: 2),
     );
   }
 
@@ -403,14 +422,150 @@ class _ImageDetailDialogState extends ConsumerState<ImageDetailDialog> {
   }
 
   void _showAddTagDialog(ImageWithDetails image) {
-    // TODO: タグ追加ダイアログを実装
+    final tagState = ref.read(tagListProvider);
+    String? selectedTagId;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => ContentDialog(
+        title: const Text('タグを追加'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '追加するタグを選択してください',
+              style: TextStyle(color: NaiTheme.text2),
+            ),
+            const SizedBox(height: 16),
+            StatefulBuilder(
+              builder: (context, setState) {
+                return ComboBox<String>(
+                  value: selectedTagId,
+                  placeholder: const Text('タグを選択'),
+                  items: tagState.tags.map((tag) {
+                    return ComboBoxItem<String>(
+                      value: tag.id,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (tag.color != null)
+                            Container(
+                              width: 12,
+                              height: 12,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                color: Color(int.parse(tag.color!.replaceFirst('#', '0xFF'))),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          Text(tag.name),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() => selectedTagId = value);
+                  },
+                );
+              },
+            ),
+          ],
+        ),
+        actions: [
+          Button(
+            child: const Text('キャンセル'),
+            onPressed: () => Navigator.pop(ctx),
+          ),
+          FilledButton(
+            onPressed: selectedTagId == null
+                ? null
+                : () {
+                    final tag = tagState.tags.firstWhere((t) => t.id == selectedTagId);
+                    ref.read(imageListProvider.notifier).addTagToImage(image.id, tag);
+                    Navigator.pop(ctx);
+                  },
+            child: const Text('追加'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showMoveToFolderDialog(ImageWithDetails image) {
-    // TODO: フォルダ移動ダイアログを実装
+    final folderState = ref.read(folderListProvider);
+    String? selectedFolderId;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => ContentDialog(
+        title: const Text('フォルダに移動'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '移動先のフォルダを選択してください',
+              style: TextStyle(color: NaiTheme.text2),
+            ),
+            const SizedBox(height: 16),
+            StatefulBuilder(
+              builder: (context, setState) {
+                return ComboBox<String?>(
+                  value: selectedFolderId,
+                  placeholder: const Text('フォルダを選択'),
+                  items: [
+                    const ComboBoxItem<String?>(
+                      value: null,
+                      child: Text('(なし)'),
+                    ),
+                    ...folderState.folders.map((folder) {
+                      return ComboBoxItem<String?>(
+                        value: folder.id,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(FluentIcons.folder, size: 16),
+                            const SizedBox(width: 8),
+                            Text(folder.name),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                  onChanged: (value) {
+                    setState(() => selectedFolderId = value);
+                  },
+                );
+              },
+            ),
+          ],
+        ),
+        actions: [
+          Button(
+            child: const Text('キャンセル'),
+            onPressed: () => Navigator.pop(ctx),
+          ),
+          FilledButton(
+            onPressed: () async {
+              await ref.read(imageListProvider.notifier).moveToFolder(
+                {image.id},
+                selectedFolderId,
+              );
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('移動'),
+          ),
+        ],
+      ),
+    );
   }
 
-  void _openInExplorer(String filePath) {
-    // TODO: エクスプローラーで開く
+  Future<void> _openInExplorer(String filePath) async {
+    final file = File(filePath);
+    if (await file.exists()) {
+      final uri = Uri.file(file.parent.path);
+      await launchUrl(uri);
+    }
   }
 }

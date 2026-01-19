@@ -35,8 +35,9 @@ class ExplorerPane extends ConsumerWidget {
             _QuickAccessItem(
               icon: FluentIcons.heart,
               label: 'お気に入り',
-              isSelected: false, // TODO: 専用状態を追加
+              isSelected: explorerState.showFavoritesOnly,
               onTap: () {
+                ref.read(explorerProvider.notifier).selectFavorites();
                 ref.read(imageListProvider.notifier).loadImages(
                   const ImageFilter(favoritesOnly: true),
                 );
@@ -97,8 +98,8 @@ class ExplorerPane extends ConsumerWidget {
         )),
         
         // タグリスト
-        SizedBox(
-          height: 200,
+        Flexible(
+          flex: 1,
           child: _buildSection(
             title: 'タグ',
             children: tagState.loading

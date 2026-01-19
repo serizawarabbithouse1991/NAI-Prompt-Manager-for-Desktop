@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/models.dart';
 import '../data/repositories/repositories.dart';
 import 'repository_providers.dart';
+import 'app_provider.dart';
 
 /// 画像リストの状態
 class ImageListState {
@@ -43,8 +44,9 @@ class ImageListState {
 /// 画像リストのNotifier
 class ImageListNotifier extends StateNotifier<ImageListState> {
   final ImageRepository _repository;
+  final bool showNsfw;
 
-  ImageListNotifier(this._repository) : super(const ImageListState());
+  ImageListNotifier(this._repository, {this.showNsfw = true}) : super(const ImageListState());
 
   /// 画像を読み込む
   Future<void> loadImages([ImageFilter? filter]) async {
@@ -61,12 +63,18 @@ class ImageListNotifier extends StateNotifier<ImageListState> {
         offset: 0,
         limit: defaultPageSize,
       );
+      
+      // NSFW画像をフィルタリング
+      final filteredImages = showNsfw 
+          ? result.images 
+          : result.images.where((img) => img.isNsfw != true).toList();
+      
       state = state.copyWith(
-        images: result.images,
+        images: filteredImages,
         pagination: PaginationState(
           page: 0,
           pageSize: defaultPageSize,
-          totalCount: result.totalCount,
+          totalCount: showNsfw ? result.totalCount : filteredImages.length,
           hasMore: result.hasMore,
         ),
         loading: false,
@@ -200,6 +208,24 @@ class ImageListNotifier extends StateNotifier<ImageListState> {
     );
   }
 
+  /// 画像をフォルダに移動
+  Future<void> moveToFolder(Set<String> imageIds, String? folderId) async {
+    // ローカル状態を更新
+    state = state.copyWith(
+      images: state.images.map((img) {
+        if (imageIds.contains(img.id)) {
+          return img.copyWith(folderId: folderId);
+        }
+        return img;
+      }).toList(),
+    );
+
+    // TODO: 実際のDB操作を実装
+    // for (final imageId in imageIds) {
+    //   await _repository.updateImage(imageId, folderId: folderId);
+    // }
+  }
+
   /// ページネーション対応の画像取得（内部メソッド）
   Future<PaginatedImagesResult> _getImagesWithPagination(
     ImageFilter filter,
@@ -220,7 +246,8 @@ class ImageListNotifier extends StateNotifier<ImageListState> {
 final imageListProvider =
     StateNotifierProvider<ImageListNotifier, ImageListState>((ref) {
   final repository = ref.watch(imageRepositoryProvider);
-  return ImageListNotifier(repository);
+  final appSettings = ref.watch(appSettingsProvider).settings;
+  return ImageListNotifier(repository, showNsfw: appSettings.showNSFW);
 });
 
 /// 選択中の画像IDリスト

@@ -5,6 +5,7 @@ import '../data/models/models.dart';
 class ExplorerState {
   final String? selectedFolderId;
   final bool showUncategorized;
+  final bool showFavoritesOnly;
   final Set<String> expandedFolderIds;
   final List<SavedSearch> savedSearches;
   final List<String> recentFolderIds;
@@ -12,6 +13,7 @@ class ExplorerState {
   const ExplorerState({
     this.selectedFolderId,
     this.showUncategorized = false,
+    this.showFavoritesOnly = false,
     this.expandedFolderIds = const {},
     this.savedSearches = const [],
     this.recentFolderIds = const [],
@@ -20,13 +22,16 @@ class ExplorerState {
   ExplorerState copyWith({
     String? selectedFolderId,
     bool? showUncategorized,
+    bool? showFavoritesOnly,
     Set<String>? expandedFolderIds,
     List<SavedSearch>? savedSearches,
     List<String>? recentFolderIds,
+    bool clearFolderId = false,
   }) {
     return ExplorerState(
-      selectedFolderId: selectedFolderId ?? this.selectedFolderId,
+      selectedFolderId: clearFolderId ? null : (selectedFolderId ?? this.selectedFolderId),
       showUncategorized: showUncategorized ?? this.showUncategorized,
+      showFavoritesOnly: showFavoritesOnly ?? this.showFavoritesOnly,
       expandedFolderIds: expandedFolderIds ?? this.expandedFolderIds,
       savedSearches: savedSearches ?? this.savedSearches,
       recentFolderIds: recentFolderIds ?? this.recentFolderIds,
@@ -43,6 +48,8 @@ class ExplorerNotifier extends StateNotifier<ExplorerState> {
     state = state.copyWith(
       selectedFolderId: folderId,
       showUncategorized: false,
+      showFavoritesOnly: false,
+      clearFolderId: folderId == null,
     );
     
     if (folderId != null) {
@@ -53,16 +60,27 @@ class ExplorerNotifier extends StateNotifier<ExplorerState> {
   /// 未分類を選択
   void selectUncategorized() {
     state = state.copyWith(
-      selectedFolderId: null,
       showUncategorized: true,
+      showFavoritesOnly: false,
+      clearFolderId: true,
+    );
+  }
+
+  /// お気に入りを選択
+  void selectFavorites() {
+    state = state.copyWith(
+      showFavoritesOnly: true,
+      showUncategorized: false,
+      clearFolderId: true,
     );
   }
 
   /// すべての画像を選択
   void selectAll() {
     state = state.copyWith(
-      selectedFolderId: null,
       showUncategorized: false,
+      showFavoritesOnly: false,
+      clearFolderId: true,
     );
   }
 

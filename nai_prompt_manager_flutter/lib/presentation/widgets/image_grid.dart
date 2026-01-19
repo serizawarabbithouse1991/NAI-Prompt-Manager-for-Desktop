@@ -1,10 +1,17 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
+import '../screens/image_detail_dialog.dart';
 import '../themes/nai_theme.dart';
+import 'image_context_menu.dart';
+
+/// 最後にクリックした画像のインデックスを保持（Shift+クリック用）
+int? _lastClickedIndex;
 
 /// 画像グリッドウィジェット
 class ImageGrid extends ConsumerWidget {
@@ -57,38 +64,75 @@ class ImageGrid extends ConsumerWidget {
           return ImageTile(
             image: image,
             isSelected: isSelected,
-            onTap: () => _handleTap(ref, image, isSelected),
+            onTap: () => _handleTap(context, ref, image, isSelected, index),
             onDoubleTap: () => _handleDoubleTap(context, ref, image),
+            onSecondaryTapUp: (details) => _handleSecondaryTap(context, ref, image, details),
           );
         },
       ),
     );
   }
 
-  void _handleTap(WidgetRef ref, ImageWithDetails image, bool isSelected) {
+  void _handleTap(BuildContext context, WidgetRef ref, ImageWithDetails image, bool isSelected, int index) {
+    final isCtrlPressed = HardwareKeyboard.instance.isControlPressed;
+    final isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
     final currentSelection = ref.read(selectedImageIdsProvider);
-    if (isSelected) {
+
+    if (isCtrlPressed) {
+      // Ctrl+クリック: トグル選択
+      if (isSelected) {
+        ref.read(selectedImageIdsProvider.notifier).state = 
+            currentSelection.difference({image.id});
+      } else {
+        ref.read(selectedImageIdsProvider.notifier).state = 
+            currentSelection.union({image.id});
+      }
+      _lastClickedIndex = index;
+    } else if (isShiftPressed && _lastClickedIndex != null) {
+      // Shift+クリック: 範囲選択
+      final start = _lastClickedIndex! < index ? _lastClickedIndex! : index;
+      final end = _lastClickedIndex! > index ? _lastClickedIndex! : index;
+      final rangeIds = images.sublist(start, end + 1).map((img) => img.id).toSet();
       ref.read(selectedImageIdsProvider.notifier).state = 
-          currentSelection.difference({image.id});
+          currentSelection.union(rangeIds);
     } else {
-      ref.read(selectedImageIdsProvider.notifier).state = 
-          currentSelection.union({image.id});
+      // 通常クリック: 単一選択/選択解除
+      if (isSelected && currentSelection.length == 1) {
+        // 既に選択中で唯一の選択なら選択解除
+        ref.read(selectedImageIdsProvider.notifier).state = {};
+      } else {
+        // それ以外は単一選択
+        ref.read(selectedImageIdsProvider.notifier).state = {image.id};
+      }
+      _lastClickedIndex = index;
     }
   }
 
   void _handleDoubleTap(BuildContext context, WidgetRef ref, ImageWithDetails image) {
-    // 画像詳細を開く
-    ref.read(selectedImageIdsProvider.notifier).state = {image.id};
-    // TODO: ImageDetailダイアログを開く
+    // ダブルクリックで詳細モーダルを開く
+    ImageDetailDialog.show(context, image.id);
+  }
+
+  /// 右クリックでコンテキストメニュー
+  void _handleSecondaryTap(BuildContext context, WidgetRef ref, ImageWithDetails image, TapUpDetails details) {
+    // 選択されていない場合は選択状態にする
+    final selectedIds = ref.read(selectedImageIdsProvider);
+    if (!selectedIds.contains(image.id)) {
+      ref.read(selectedImageIdsProvider.notifier).state = {image.id};
+    }
+    
+    // コンテキストメニューを表示
+    ImageContextMenu.show(context, ref, image, details.globalPosition);
   }
 }
 
 /// 画像タイルウィジェット
-class ImageTile extends StatefulWidget {
+class ImageTile extends ConsumerStatefulWidget {
   final ImageWithDetails image;
   final bool isSelected;
   final VoidCallback onTap;
   final VoidCallback onDoubleTap;
+  final void Function(TapUpDetails)? onSecondaryTapUp;
 
   const ImageTile({
     super.key,
@@ -96,23 +140,33 @@ class ImageTile extends StatefulWidget {
     required this.isSelected,
     required this.onTap,
     required this.onDoubleTap,
+    this.onSecondaryTapUp,
   });
 
   @override
-  State<ImageTile> createState() => _ImageTileState();
+  ConsumerState<ImageTile> createState() => _ImageTileState();
 }
 
-class _ImageTileState extends State<ImageTile> {
+class _ImageTileState extends ConsumerState<ImageTile> {
   bool _isHovered = false;
+  bool _blurRevealed = false; // ユーザーがぼかしを一時的に解除
 
   @override
   Widget build(BuildContext context) {
+    final appSettings = ref.watch(appSettingsProvider).settings;
+    final isNsfw = widget.image.isNsfw == true;
+    final shouldBlur = isNsfw && appSettings.blurNSFW && !_blurRevealed;
+
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
+      onExit: (_) => setState(() {
+        _isHovered = false;
+        _blurRevealed = false; // マウスが離れたらぼかしをリセット
+      }),
       child: GestureDetector(
         onTap: widget.onTap,
         onDoubleTap: widget.onDoubleTap,
+        onSecondaryTapUp: widget.onSecondaryTapUp,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           decoration: BoxDecoration(
@@ -130,11 +184,15 @@ class _ImageTileState extends State<ImageTile> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // サムネイル
-                _buildThumbnail(),
+                // サムネイル（ぼかし付き）
+                _buildThumbnail(shouldBlur),
+                
+                // ぼかし解除オーバーレイ
+                if (shouldBlur && _isHovered)
+                  _buildBlurRevealOverlay(),
                 
                 // オーバーレイ（ホバー時）
-                if (_isHovered || widget.isSelected)
+                if ((_isHovered || widget.isSelected) && !shouldBlur)
                   _buildOverlay(),
                 
                 // お気に入りバッジ
@@ -157,7 +215,7 @@ class _ImageTileState extends State<ImageTile> {
                   ),
                 
                 // NSFWバッジ
-                if (widget.image.isNsfw == true)
+                if (isNsfw)
                   Positioned(
                     top: 4,
                     left: 4,
@@ -179,7 +237,7 @@ class _ImageTileState extends State<ImageTile> {
                   ),
                 
                 // タグ数
-                if (widget.image.tags.isNotEmpty)
+                if (widget.image.tags.isNotEmpty && !shouldBlur)
                   Positioned(
                     bottom: 4,
                     left: 4,
@@ -210,7 +268,36 @@ class _ImageTileState extends State<ImageTile> {
     );
   }
 
-  Widget _buildThumbnail() {
+  Widget _buildBlurRevealOverlay() {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        // イベント伝播を止めてぼかしのみ解除
+        setState(() => _blurRevealed = true);
+      },
+      child: Container(
+        color: NaiTheme.bg0.withAlpha(150),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(FluentIcons.view, size: 24, color: NaiTheme.text0),
+              const SizedBox(height: 4),
+              Text(
+                'クリックで表示',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: NaiTheme.text0,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThumbnail(bool shouldBlur) {
     final thumbnailPath = widget.image.thumbnailPath;
     final filePath = widget.image.filePath;
 
@@ -218,17 +305,28 @@ class _ImageTileState extends State<ImageTile> {
     final path = thumbnailPath ?? filePath;
     final file = File(path);
 
+    Widget thumbnail;
     if (file.existsSync()) {
-      return Image.file(
+      thumbnail = Image.file(
         file,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) {
           return _buildPlaceholder();
         },
       );
+    } else {
+      thumbnail = _buildPlaceholder();
     }
 
-    return _buildPlaceholder();
+    // ぼかし効果を適用
+    if (shouldBlur) {
+      return ImageFiltered(
+        imageFilter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: thumbnail,
+      );
+    }
+
+    return thumbnail;
   }
 
   Widget _buildPlaceholder() {
