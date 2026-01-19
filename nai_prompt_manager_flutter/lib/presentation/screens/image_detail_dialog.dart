@@ -10,34 +10,112 @@ import '../themes/nai_theme.dart';
 
 /// 画像詳細ダイアログ
 class ImageDetailDialog extends ConsumerStatefulWidget {
-  final String imageId;
+  final List<String> imageIds;
+  final int initialIndex;
 
   const ImageDetailDialog({
     super.key,
-    required this.imageId,
+    required this.imageIds,
+    required this.initialIndex,
   });
 
   @override
   ConsumerState<ImageDetailDialog> createState() => _ImageDetailDialogState();
 
   /// ダイアログを表示
-  static Future<void> show(BuildContext context, String imageId) async {
+  static Future<void> show(
+    BuildContext context, {
+    required List<String> imageIds,
+    required int initialIndex,
+  }) async {
     await showDialog<void>(
       context: context,
       barrierDismissible: true,
-      dismissWithEsc: true,
-      builder: (dialogContext) => ImageDetailDialog(imageId: imageId),
+      dismissWithEsc: false, // キーボードナビゲーションのため無効化
+      builder: (dialogContext) => ImageDetailDialog(
+        imageIds: imageIds,
+        initialIndex: initialIndex,
+      ),
     );
   }
 }
 
 class _ImageDetailDialogState extends ConsumerState<ImageDetailDialog> {
   int _selectedTab = 0;
+  late int _currentIndex;
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  /// 現在の画像ID
+  String get _currentImageId => widget.imageIds[_currentIndex];
+
+  /// 前の画像があるかどうか
+  bool get _hasPrevious => _currentIndex > 0;
+
+  /// 次の画像があるかどうか
+  bool get _hasNext => _currentIndex < widget.imageIds.length - 1;
+
+  /// ナビゲーションを表示するかどうか（画像が2枚以上の場合）
+  bool get _showNavigation => widget.imageIds.length > 1;
+
+  /// 前の画像へ遷移
+  void _goPrevious() {
+    if (_hasPrevious) {
+      setState(() {
+        _currentIndex--;
+      });
+    }
+  }
+
+  /// 次の画像へ遷移
+  void _goNext() {
+    if (_hasNext) {
+      setState(() {
+        _currentIndex++;
+      });
+    }
+  }
+
+  /// キーボードイベントハンドラ
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    // 左矢印キー: 前の画像へ
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      _goPrevious();
+      return KeyEventResult.handled;
+    }
+
+    // 右矢印キー: 次の画像へ
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      _goNext();
+      return KeyEventResult.handled;
+    }
+
+    // Escapeキー: ダイアログを閉じる
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      Navigator.pop(context);
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
 
   @override
   Widget build(BuildContext context) {
     final imageState = ref.watch(imageListProvider);
-    final image = imageState.images.where((img) => img.id == widget.imageId).firstOrNull;
+    final image = imageState.images.where((img) => img.id == _currentImageId).firstOrNull;
 
     if (image == null) {
       return ContentDialog(
@@ -52,39 +130,82 @@ class _ImageDetailDialogState extends ConsumerState<ImageDetailDialog> {
       );
     }
 
-    return ContentDialog(
-      constraints: const BoxConstraints(maxWidth: 1200, maxHeight: 800),
-      content: SizedBox(
-        width: 1100,
-        height: 650,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // 左側: 画像プレビュー
-            Expanded(
-              flex: 3,
-              child: _buildImagePreview(image),
-            ),
-            const SizedBox(width: 16),
-            // 右側: 情報パネル
-            SizedBox(
-              width: 350,
-              child: _buildInfoPanel(image),
-            ),
-          ],
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: _handleKeyEvent,
+      child: ContentDialog(
+        constraints: const BoxConstraints(maxWidth: 1200, maxHeight: 800),
+        content: SizedBox(
+          width: 1100,
+          height: 650,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 左側: 画像プレビュー
+              Expanded(
+                flex: 3,
+                child: _buildImagePreview(image),
+              ),
+              const SizedBox(width: 16),
+              // 右側: 情報パネル
+              SizedBox(
+                width: 350,
+                child: _buildInfoPanel(image),
+              ),
+            ],
+          ),
         ),
+        actions: _buildActions(image),
       ),
-      actions: [
-        Button(
-          child: const Text('閉じる'),
-          onPressed: () => Navigator.pop(context),
-        ),
-        FilledButton(
-          child: const Text('エクスプローラーで開く'),
-          onPressed: () => _openInExplorer(image.filePath),
-        ),
-      ],
     );
+  }
+
+  /// アクションボタンを構築
+  List<Widget> _buildActions(ImageWithDetails image) {
+    return [
+      // ナビゲーションボタン（2枚以上の場合のみ表示）
+      if (_showNavigation) ...[
+        Button(
+          onPressed: _hasPrevious ? _goPrevious : null,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(FluentIcons.chevron_left, size: 12),
+              const SizedBox(width: 4),
+              const Text('前へ'),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Text(
+            '${_currentIndex + 1} / ${widget.imageIds.length}',
+            style: TextStyle(color: NaiTheme.text1, fontSize: 13),
+          ),
+        ),
+        Button(
+          onPressed: _hasNext ? _goNext : null,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('次へ'),
+              const SizedBox(width: 4),
+              Icon(FluentIcons.chevron_right, size: 12),
+            ],
+          ),
+        ),
+        const SizedBox(width: 16),
+      ],
+      Button(
+        child: const Text('閉じる'),
+        onPressed: () => Navigator.pop(context),
+      ),
+      FilledButton(
+        child: const Text('エクスプローラーで開く'),
+        onPressed: () => _openInExplorer(image.filePath),
+      ),
+    ];
   }
 
   Widget _buildImagePreview(ImageWithDetails image) {
@@ -97,27 +218,72 @@ class _ImageDetailDialogState extends ConsumerState<ImageDetailDialog> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: file.existsSync()
-            ? InteractiveViewer(
-                child: Image.file(
-                  file,
-                  fit: BoxFit.contain,
-                ),
-              )
-            : Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(FluentIcons.photo2, size: 64, color: NaiTheme.text2),
-                    const SizedBox(height: 16),
-                    Text(
-                      'ファイルが見つかりません',
-                      style: TextStyle(color: NaiTheme.text2),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // 画像本体
+            file.existsSync()
+                ? InteractiveViewer(
+                    child: Image.file(
+                      file,
+                      fit: BoxFit.contain,
                     ),
-                  ],
+                  )
+                : Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(FluentIcons.photo2, size: 64, color: NaiTheme.text2),
+                        const SizedBox(height: 16),
+                        Text(
+                          'ファイルが見つかりません',
+                          style: TextStyle(color: NaiTheme.text2),
+                        ),
+                      ],
+                    ),
+                  ),
+            
+            // オーバーレイナビゲーションボタン（2枚以上の場合のみ）
+            if (_showNavigation) ...[
+              // 前へボタン（左端）
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                child: _buildOverlayNavButton(
+                  icon: FluentIcons.chevron_left,
+                  onPressed: _hasPrevious ? _goPrevious : null,
+                  alignment: Alignment.centerLeft,
                 ),
               ),
+              // 次へボタン（右端）
+              Positioned(
+                right: 0,
+                top: 0,
+                bottom: 0,
+                child: _buildOverlayNavButton(
+                  icon: FluentIcons.chevron_right,
+                  onPressed: _hasNext ? _goNext : null,
+                  alignment: Alignment.centerRight,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
+    );
+  }
+
+  /// オーバーレイナビゲーションボタンを構築
+  Widget _buildOverlayNavButton({
+    required IconData icon,
+    required VoidCallback? onPressed,
+    required Alignment alignment,
+  }) {
+    return _HoverNavButton(
+      icon: icon,
+      onPressed: onPressed,
+      alignment: alignment,
     );
   }
 
@@ -574,5 +740,82 @@ class _ImageDetailDialogState extends ConsumerState<ImageDetailDialog> {
       final uri = Uri.file(file.parent.path);
       await launchUrl(uri);
     }
+  }
+}
+
+/// ホバー時に表示されるナビゲーションボタン
+class _HoverNavButton extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final Alignment alignment;
+
+  const _HoverNavButton({
+    required this.icon,
+    required this.onPressed,
+    required this.alignment,
+  });
+
+  @override
+  State<_HoverNavButton> createState() => _HoverNavButtonState();
+}
+
+class _HoverNavButtonState extends State<_HoverNavButton> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDisabled = widget.onPressed == null;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 200),
+          opacity: _isHovered ? 1.0 : 0.0,
+          child: Container(
+            width: 60,
+            alignment: widget.alignment,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: widget.alignment == Alignment.centerLeft
+                    ? Alignment.centerLeft
+                    : Alignment.centerRight,
+                end: widget.alignment == Alignment.centerLeft
+                    ? Alignment.centerRight
+                    : Alignment.centerLeft,
+                colors: [
+                  NaiTheme.bg0.withAlpha(180),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: isDisabled
+                      ? NaiTheme.bg2.withAlpha(150)
+                      : NaiTheme.bg1.withAlpha(220),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDisabled ? NaiTheme.bg3 : NaiTheme.accent,
+                    width: 1,
+                  ),
+                ),
+                child: Icon(
+                  widget.icon,
+                  size: 20,
+                  color: isDisabled ? NaiTheme.text2 : NaiTheme.text0,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

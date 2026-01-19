@@ -78,7 +78,7 @@ class ImageGrid extends ConsumerWidget {
           isSelected: isSelected,
           thumbnailSize: thumbnailSize,
           onTap: () => _handleTap(context, ref, image, isSelected, index),
-          onDoubleTap: () => _handleDoubleTap(context, ref, image),
+          onDoubleTap: () => _handleDoubleTap(context, ref, image, index),
           onSecondaryTapUp: (details) => _handleSecondaryTap(context, ref, image, details),
         );
       },
@@ -112,7 +112,7 @@ class ImageGrid extends ConsumerWidget {
                 image: image,
                 isSelected: isSelected,
                 onTap: () => _handleTap(context, ref, image, isSelected, index),
-                onDoubleTap: () => _handleDoubleTap(context, ref, image),
+                onDoubleTap: () => _handleDoubleTap(context, ref, image, index),
                 onSecondaryTapUp: (details) => _handleSecondaryTap(context, ref, image, details),
               );
             },
@@ -224,9 +224,14 @@ class ImageGrid extends ConsumerWidget {
     }
   }
 
-  void _handleDoubleTap(BuildContext context, WidgetRef ref, ImageWithDetails image) {
+  void _handleDoubleTap(BuildContext context, WidgetRef ref, ImageWithDetails image, int index) {
     // ダブルクリックで詳細モーダルを開く
-    ImageDetailDialog.show(context, image.id);
+    final imageIds = images.map((img) => img.id).toList();
+    ImageDetailDialog.show(
+      context,
+      imageIds: imageIds,
+      initialIndex: index,
+    );
   }
 
   /// 右クリックでコンテキストメニュー

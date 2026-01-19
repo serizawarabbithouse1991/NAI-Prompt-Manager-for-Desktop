@@ -96,7 +96,15 @@ class ImageContextMenu {
             shortcut: 'Enter',
             onTap: () {
               closeMenu();
-              ImageDetailDialog.show(context, image.id);
+              // 画像リストとインデックスを取得してダイアログを開く
+              final images = ref.read(imageListProvider).images;
+              final imageIds = images.map((img) => img.id).toList();
+              final index = imageIds.indexOf(image.id);
+              ImageDetailDialog.show(
+                context,
+                imageIds: imageIds,
+                initialIndex: index >= 0 ? index : 0,
+              );
             },
           ),
 
