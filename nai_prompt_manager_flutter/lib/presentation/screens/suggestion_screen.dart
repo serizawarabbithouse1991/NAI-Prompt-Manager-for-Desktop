@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/services/danbooru_tag_service.dart';
+import '../../providers/danbooru_provider.dart';
 import '../../providers/suggestion_provider.dart';
 import '../../services/suggestion_service.dart';
 import '../themes/nai_theme.dart';
@@ -16,11 +17,15 @@ class SuggestionScreen extends ConsumerStatefulWidget {
 }
 
 class _SuggestionScreenState extends ConsumerState<SuggestionScreen> {
+  String? _lastDanbooruDbPath;
+
   @override
   void initState() {
     super.initState();
     // 初期化
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final danbooruState = ref.read(danbooruServiceProvider);
+      _lastDanbooruDbPath = danbooruState.dbPath;
       ref.read(suggestionProvider.notifier).initialize();
     });
   }
@@ -28,6 +33,16 @@ class _SuggestionScreenState extends ConsumerState<SuggestionScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(suggestionProvider);
+    
+    // Danbooru状態の変化を監視し、DBパスが変わったら再初期化
+    final danbooruState = ref.watch(danbooruServiceProvider);
+    if (danbooruState.dbPath != _lastDanbooruDbPath && danbooruState.initialized) {
+      _lastDanbooruDbPath = danbooruState.dbPath;
+      // 次フレームで再初期化を実行
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(suggestionProvider.notifier).refresh();
+      });
+    }
 
     return ScaffoldPage(
       header: PageHeader(

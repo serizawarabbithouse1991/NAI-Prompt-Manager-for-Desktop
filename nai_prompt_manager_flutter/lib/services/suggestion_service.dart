@@ -1,9 +1,25 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'package:sqlite3/sqlite3.dart';
-import 'dart:io';
 
 import '../data/services/danbooru_tag_service.dart';
 import '../data/repositories/suggestion_repository.dart';
+
+// #region debug log
+void _debugLog(String location, String message, Map<String, dynamic> data) {
+  try {
+    final logFile = File(r'c:\Users\rt032\001-WEBDEV\NAI Prompt Manager\.cursor\debug.log');
+    final logEntry = jsonEncode({
+      'location': location,
+      'message': message,
+      'data': data,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+    logFile.writeAsStringSync('$logEntry\n', mode: FileMode.append);
+  } catch (_) {}
+}
+// #endregion
 
 /// 提案タグ
 class SuggestedTag {
@@ -65,19 +81,55 @@ class SuggestionService {
 
   /// 初期化
   Future<bool> initialize() async {
-    if (_initialized) return _danbooruDb != null;
+    _debugLog('SuggestionService.initialize', 'Starting initialization', {
+      'alreadyInitialized': _initialized,
+      'dbPath': _danbooruDbPath,
+    });
+
+    if (_initialized) {
+      _debugLog('SuggestionService.initialize', 'Already initialized', {
+        'dbAvailable': _danbooruDb != null,
+      });
+      return _danbooruDb != null;
+    }
 
     final dbPath = _danbooruDbPath;
-    if (dbPath == null) return false;
+    if (dbPath == null) {
+      _debugLog('SuggestionService.initialize', 'DB path is null', {});
+      _initialized = true;
+      return false;
+    }
 
     final file = File(dbPath);
-    if (!await file.exists()) return false;
+    final exists = await file.exists();
+    _debugLog('SuggestionService.initialize', 'Checking DB file', {
+      'path': dbPath,
+      'exists': exists,
+    });
+
+    if (!exists) {
+      _initialized = true;
+      return false;
+    }
 
     try {
       _danbooruDb = sqlite3.open(dbPath, mode: OpenMode.readOnly);
       _initialized = true;
+      
+      // DBの確認クエリを実行
+      final testResult = _danbooruDb!.select('SELECT COUNT(*) as cnt FROM tag LIMIT 1');
+      final tagCount = testResult.isNotEmpty ? testResult.first['cnt'] : 0;
+      
+      _debugLog('SuggestionService.initialize', 'DB opened successfully', {
+        'path': dbPath,
+        'tagCount': tagCount,
+      });
       return true;
     } catch (e) {
+      _debugLog('SuggestionService.initialize', 'Failed to open DB', {
+        'error': e.toString(),
+      });
+      _initialized = true;
       return false;
     }
   }
@@ -91,7 +143,10 @@ class SuggestionService {
     int limit = 100,
     int minPopularity = 1000,
   }) async {
-    if (_danbooruDb == null) return [];
+    if (_danbooruDb == null) {
+      _debugLog('SuggestionService.getPopularTags', 'DB not available', {});
+      return [];
+    }
 
     try {
       String sql;
@@ -118,6 +173,13 @@ class SuggestionService {
       }
 
       final result = _danbooruDb!.select(sql, params);
+      
+      _debugLog('SuggestionService.getPopularTags', 'Query executed', {
+        'category': category?.displayName,
+        'minPopularity': minPopularity,
+        'limit': limit,
+        'resultCount': result.length,
+      });
 
       return result.map((row) {
         final name = row['name'] as String;
@@ -132,6 +194,9 @@ class SuggestionService {
         );
       }).toList();
     } catch (e) {
+      _debugLog('SuggestionService.getPopularTags', 'Query failed', {
+        'error': e.toString(),
+      });
       return [];
     }
   }
@@ -361,7 +426,10 @@ class SuggestionService {
     required UserUsageAnalysis userAnalysis,
     int limit = 10,
   }) async {
-    if (_danbooruDb == null) return [];
+    if (_danbooruDb == null) {
+      _debugLog('SuggestionService.suggestRandomDiscovery', 'DB not available', {});
+      return [];
+    }
 
     try {
       // ランダムに人気タグを取得
@@ -372,6 +440,10 @@ class SuggestionService {
         ORDER BY RANDOM() 
         LIMIT ?
       ''', [limit * 3]);
+
+      _debugLog('SuggestionService.suggestRandomDiscovery', 'Query executed', {
+        'resultCount': result.length,
+      });
 
       final tags = result.map((row) {
         final name = row['name'] as String;
@@ -388,11 +460,21 @@ class SuggestionService {
       }).toList();
 
       // 使用済みタグを除外
-      return tags
+      final filtered = tags
           .where((tag) => !userAnalysis.hasUsedTag(tag.name))
           .take(limit)
           .toList();
+      
+      _debugLog('SuggestionService.suggestRandomDiscovery', 'Filtered results', {
+        'beforeFilter': tags.length,
+        'afterFilter': filtered.length,
+      });
+
+      return filtered;
     } catch (e) {
+      _debugLog('SuggestionService.suggestRandomDiscovery', 'Query failed', {
+        'error': e.toString(),
+      });
       return [];
     }
   }

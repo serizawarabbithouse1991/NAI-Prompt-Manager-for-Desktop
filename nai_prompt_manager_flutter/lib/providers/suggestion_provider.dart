@@ -1,6 +1,4 @@
-import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
 
 import '../data/repositories/suggestion_repository.dart';
 import '../data/services/danbooru_tag_service.dart';
@@ -225,25 +223,11 @@ final suggestionRepositoryProvider = Provider<SuggestionRepository>((ref) {
 });
 
 /// SuggestionServiceのプロバイダー
+/// DanbooruServiceProviderからDBパスを取得して共有する
 final suggestionServiceProvider = Provider<SuggestionService>((ref) {
-  // Danbooruデータベースのパスを探索
-  final possiblePaths = [
-    'danbooru2023.db',
-    p.join(Directory.current.path, 'danbooru2023.db'),
-    p.join(Directory.current.parent.path, 'danbooru2023.db'),
-    r'c:\Users\rt032\001-WEBDEV\NAI Prompt Manager\danbooru2023.db',
-  ];
-
-  String? foundPath;
-  for (final path in possiblePaths) {
-    final file = File(path);
-    if (file.existsSync()) {
-      foundPath = path;
-      break;
-    }
-  }
-
-  return SuggestionService(danbooruDbPath: foundPath);
+  // DanbooruServiceProviderから設定済みのDBパスを取得
+  final danbooruState = ref.watch(danbooruServiceProvider);
+  return SuggestionService(danbooruDbPath: danbooruState.dbPath);
 });
 
 /// 提案状態のプロバイダー
