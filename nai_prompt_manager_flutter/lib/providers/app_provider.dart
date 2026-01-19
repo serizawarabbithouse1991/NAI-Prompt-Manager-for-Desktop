@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/models.dart';
+import '../data/repositories/settings_repository.dart';
+import 'database_provider.dart';
 
 /// アプリケーション設定の状態
 class AppSettingsState {
@@ -36,7 +38,12 @@ class AppSettingsState {
 
 /// アプリケーション設定のNotifier
 class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
-  AppSettingsNotifier() : super(const AppSettingsState());
+  final SettingsRepository _repository;
+
+  AppSettingsNotifier(this._repository) : super(const AppSettingsState()) {
+    // 初期化時に設定を読み込む
+    loadSettings();
+  }
 
   /// 設定を読み込む
   Future<void> loadSettings() async {
@@ -45,15 +52,21 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
     state = state.copyWith(loading: true, error: null);
 
     try {
-      // TODO: DBから設定を読み込む
+      // DBから設定を読み込む
+      final appSettings = await _repository.loadAppSettings();
+      final viewOptions = await _repository.loadViewOptions();
+
       state = state.copyWith(
-        settings: const AppSettings(),
-        viewOptions: const ViewOptions(),
+        settings: appSettings,
+        viewOptions: viewOptions,
         initialized: true,
         loading: false,
       );
     } catch (e) {
+      // エラー時はデフォルト設定を使用
       state = state.copyWith(
+        settings: const AppSettings(),
+        viewOptions: const ViewOptions(),
         error: e.toString(),
         loading: false,
         initialized: true,
@@ -67,15 +80,24 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
     state = state.copyWith(settings: newSettings);
 
     try {
-      // TODO: DBに設定を保存
+      // DBに設定を保存
+      await _repository.saveAppSettings(newSettings);
     } catch (e) {
       state = state.copyWith(error: e.toString());
     }
   }
 
   /// 表示オプションを更新
-  void updateViewOptions(ViewOptions Function(ViewOptions) updater) {
-    state = state.copyWith(viewOptions: updater(state.viewOptions));
+  Future<void> updateViewOptions(ViewOptions Function(ViewOptions) updater) async {
+    final newOptions = updater(state.viewOptions);
+    state = state.copyWith(viewOptions: newOptions);
+
+    try {
+      // DBに設定を保存
+      await _repository.saveViewOptions(newOptions);
+    } catch (e) {
+      state = state.copyWith(error: e.toString());
+    }
   }
 
   /// テーマを変更
@@ -122,10 +144,17 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
   }
 }
 
+/// 設定リポジトリのプロバイダー
+final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
+  final db = ref.watch(databaseProvider);
+  return SettingsRepository(db);
+});
+
 /// アプリケーション設定のプロバイダー
 final appSettingsProvider =
     StateNotifierProvider<AppSettingsNotifier, AppSettingsState>((ref) {
-  return AppSettingsNotifier();
+  final repository = ref.watch(settingsRepositoryProvider);
+  return AppSettingsNotifier(repository);
 });
 
 /// 表示モードのショートカットプロバイダー

@@ -1,7 +1,8 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:fluent_ui/fluent_ui.dart' hide ThemeMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
+import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 import '../../services/services.dart';
 import '../themes/nai_theme.dart';
@@ -28,7 +29,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void initState() {
     super.initState();
     _checkTauriDb();
-    _checkDanbooruDb();
+    _loadDanbooruStats();
   }
 
   Future<void> _checkTauriDb() async {
@@ -46,11 +47,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _checkingTauriDb = false);
   }
 
-  Future<void> _checkDanbooruDb() async {
+  Future<void> _loadDanbooruStats() async {
+    // DanbooruServiceから統計を取得
     final service = DanbooruService();
     if (service.isConfigured) {
       final stats = await service.getStats();
-      setState(() => _danbooruStats = stats);
+      if (mounted) {
+        setState(() => _danbooruStats = stats);
+      }
     }
   }
 
@@ -67,14 +71,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       });
 
       final path = result.files.single.path!;
-      final service = DanbooruService();
-      final success = await service.openDatabase(path);
+      
+      // Provider経由でDBを設定（永続化も行われる）
+      final success = await ref.read(danbooruServiceProvider.notifier).setDatabasePath(path);
 
       if (success) {
+        // 統計情報を取得
+        final service = DanbooruService();
         final stats = await service.getStats();
         setState(() {
           _danbooruStats = stats;
-          _danbooruStatus = 'Danbooru DBを読み込みました';
+          _danbooruStatus = 'Danbooru DBを読み込みました（設定を保存しました）';
           _loadingDanbooru = false;
         });
       } else {
@@ -86,12 +93,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  void _closeDanbooruDb() {
-    final service = DanbooruService();
-    service.close();
+  Future<void> _closeDanbooruDb() async {
+    // Provider経由でDBを閉じる（設定からも削除される）
+    await ref.read(danbooruServiceProvider.notifier).closeDatabase();
+    
     setState(() {
       _danbooruStats = null;
-      _danbooruStatus = 'Danbooru DBを閉じました';
+      _danbooruStatus = 'Danbooru DBを閉じました（設定を削除しました）';
     });
   }
 
@@ -173,7 +181,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           title: '表示設定',
           icon: FluentIcons.view,
           children: [
-            _buildPlaceholderCard('サムネイルサイズ、グリッド/リスト表示の設定'),
+            _buildDisplaySettingsCard(),
           ],
         ),
         const SizedBox(height: 24),
@@ -181,7 +189,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           title: 'アプリケーション',
           icon: FluentIcons.settings,
           children: [
-            _buildPlaceholderCard('テーマ、言語、自動タグ設定など'),
+            _buildApplicationSettingsCard(),
           ],
         ),
       ],
@@ -877,18 +885,605 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildPlaceholderCard(String description) {
+  /// 表示設定カード
+  Widget _buildDisplaySettingsCard() {
+    final viewOptions = ref.watch(appSettingsProvider).viewOptions;
+
     return Card(
       padding: const EdgeInsets.all(16),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(FluentIcons.settings, size: 24, color: NaiTheme.text2),
-          const SizedBox(width: 12),
+          // 表示モード（グリッド/リスト）
           Text(
-            description,
-            style: TextStyle(color: NaiTheme.text2),
+            '表示モード',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: NaiTheme.text0,
+            ),
           ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _buildViewModeButton(
+                icon: FluentIcons.grid_view_medium,
+                label: 'グリッド',
+                isSelected: viewOptions.mode == ViewMode.grid,
+                onPressed: () {
+                  ref.read(appSettingsProvider.notifier).updateViewOptions(
+                    (opts) => opts.copyWith(mode: ViewMode.grid),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildViewModeButton(
+                icon: FluentIcons.list,
+                label: 'リスト',
+                isSelected: viewOptions.mode == ViewMode.list,
+                onPressed: () {
+                  ref.read(appSettingsProvider.notifier).updateViewOptions(
+                    (opts) => opts.copyWith(mode: ViewMode.list),
+                  );
+                },
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+          Divider(style: DividerThemeData(decoration: BoxDecoration(color: NaiTheme.bg2))),
+          const SizedBox(height: 20),
+
+          // サムネイルサイズ
+          Text(
+            'サムネイルサイズ',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: NaiTheme.text0,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '現在: ${_getThumbnailSizeLabel(viewOptions.thumbnailSize)} (${viewOptions.thumbnailSize.pixels}px)',
+            style: TextStyle(
+              fontSize: 12,
+              color: NaiTheme.text2,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: ThumbnailSize.values.map((size) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _buildThumbnailSizeButton(
+                  size: size,
+                  isSelected: viewOptions.thumbnailSize == size,
+                  onPressed: () {
+                    ref.read(appSettingsProvider.notifier).updateViewOptions(
+                      (opts) => opts.copyWith(thumbnailSize: size),
+                    );
+                  },
+                ),
+              );
+            }).toList(),
+          ),
+
+          const SizedBox(height: 20),
+          Divider(style: DividerThemeData(decoration: BoxDecoration(color: NaiTheme.bg2))),
+          const SizedBox(height: 20),
+
+          // ソート設定
+          Text(
+            'ソート設定',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: NaiTheme.text0,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // ソート基準
+          Row(
+            children: [
+              Text(
+                'ソート基準:',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: NaiTheme.text1,
+                ),
+              ),
+              const SizedBox(width: 12),
+              ComboBox<SortBy>(
+                value: viewOptions.sortBy,
+                items: SortBy.values.map((sortBy) {
+                  return ComboBoxItem<SortBy>(
+                    value: sortBy,
+                    child: Text(_getSortByLabel(sortBy)),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    ref.read(appSettingsProvider.notifier).updateViewOptions(
+                      (opts) => opts.copyWith(sortBy: value),
+                    );
+                  }
+                },
+              ),
+              const SizedBox(width: 24),
+              Text(
+                'ソート順:',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: NaiTheme.text1,
+                ),
+              ),
+              const SizedBox(width: 12),
+              ComboBox<SortOrder>(
+                value: viewOptions.sortOrder,
+                items: SortOrder.values.map((order) {
+                  return ComboBoxItem<SortOrder>(
+                    value: order,
+                    child: Text(_getSortOrderLabel(order)),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    ref.read(appSettingsProvider.notifier).updateViewOptions(
+                      (opts) => opts.copyWith(sortOrder: value),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+
+          // リスト表示時のみ：行サイズ設定
+          if (viewOptions.mode == ViewMode.list) ...[
+            const SizedBox(height: 20),
+            Divider(style: DividerThemeData(decoration: BoxDecoration(color: NaiTheme.bg2))),
+            const SizedBox(height: 20),
+
+            Text(
+              'リスト行サイズ',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: NaiTheme.text0,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: ListRowSize.values.map((size) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: _buildListRowSizeButton(
+                    size: size,
+                    isSelected: viewOptions.listRowSize == size,
+                    onPressed: () {
+                      ref.read(appSettingsProvider.notifier).updateViewOptions(
+                        (opts) => opts.copyWith(listRowSize: size),
+                      );
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildViewModeButton({
+    required IconData icon,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onPressed,
+  }) {
+    return Button(
+      style: ButtonStyle(
+        backgroundColor: WidgetStatePropertyAll(
+          isSelected ? NaiTheme.accent.withAlpha(30) : NaiTheme.bg2,
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(4),
+            side: BorderSide(
+              color: isSelected ? NaiTheme.accent : Colors.transparent,
+              width: 1,
+            ),
+          ),
+        ),
+      ),
+      onPressed: onPressed,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: isSelected ? NaiTheme.accent : NaiTheme.text1),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? NaiTheme.accent : NaiTheme.text1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThumbnailSizeButton({
+    required ThumbnailSize size,
+    required bool isSelected,
+    required VoidCallback onPressed,
+  }) {
+    return Button(
+      style: ButtonStyle(
+        backgroundColor: WidgetStatePropertyAll(
+          isSelected ? NaiTheme.accent.withAlpha(30) : NaiTheme.bg2,
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(4),
+            side: BorderSide(
+              color: isSelected ? NaiTheme.accent : Colors.transparent,
+              width: 1,
+            ),
+          ),
+        ),
+      ),
+      onPressed: onPressed,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Text(
+          _getThumbnailSizeLabel(size),
+          style: TextStyle(
+            color: isSelected ? NaiTheme.accent : NaiTheme.text1,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListRowSizeButton({
+    required ListRowSize size,
+    required bool isSelected,
+    required VoidCallback onPressed,
+  }) {
+    return Button(
+      style: ButtonStyle(
+        backgroundColor: WidgetStatePropertyAll(
+          isSelected ? NaiTheme.accent.withAlpha(30) : NaiTheme.bg2,
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(4),
+            side: BorderSide(
+              color: isSelected ? NaiTheme.accent : Colors.transparent,
+              width: 1,
+            ),
+          ),
+        ),
+      ),
+      onPressed: onPressed,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Text(
+          _getListRowSizeLabel(size),
+          style: TextStyle(
+            color: isSelected ? NaiTheme.accent : NaiTheme.text1,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _getThumbnailSizeLabel(ThumbnailSize size) {
+    switch (size) {
+      case ThumbnailSize.small:
+        return '小';
+      case ThumbnailSize.medium:
+        return '中';
+      case ThumbnailSize.large:
+        return '大';
+      case ThumbnailSize.xlarge:
+        return '特大';
+    }
+  }
+
+  String _getSortByLabel(SortBy sortBy) {
+    switch (sortBy) {
+      case SortBy.date:
+        return '日付';
+      case SortBy.name:
+        return '名前';
+      case SortBy.size:
+        return 'サイズ';
+    }
+  }
+
+  String _getSortOrderLabel(SortOrder order) {
+    switch (order) {
+      case SortOrder.asc:
+        return '昇順';
+      case SortOrder.desc:
+        return '降順';
+    }
+  }
+
+  String _getListRowSizeLabel(ListRowSize size) {
+    switch (size) {
+      case ListRowSize.compact:
+        return 'コンパクト';
+      case ListRowSize.normal:
+        return '標準';
+      case ListRowSize.comfortable:
+        return 'ゆったり';
+    }
+  }
+
+  /// アプリケーション設定カード
+  Widget _buildApplicationSettingsCard() {
+    final appSettings = ref.watch(appSettingsProvider).settings;
+
+    return Card(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // テーマ設定
+          Text(
+            'テーマ',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: NaiTheme.text0,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: ThemeMode.values.map((mode) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _buildThemeModeButton(
+                  mode: mode,
+                  isSelected: appSettings.theme == mode,
+                  onPressed: () {
+                    ref.read(appSettingsProvider.notifier).setTheme(mode);
+                  },
+                ),
+              );
+            }).toList(),
+          ),
+
+          const SizedBox(height: 20),
+          Divider(style: DividerThemeData(decoration: BoxDecoration(color: NaiTheme.bg2))),
+          const SizedBox(height: 20),
+
+          // 言語設定
+          Text(
+            '言語',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: NaiTheme.text0,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _buildLanguageButton(
+                languageCode: 'ja',
+                label: '日本語',
+                isSelected: appSettings.language == 'ja',
+                onPressed: () {
+                  ref.read(appSettingsProvider.notifier).setLanguage('ja');
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildLanguageButton(
+                languageCode: 'en',
+                label: 'English',
+                isSelected: appSettings.language == 'en',
+                onPressed: () {
+                  ref.read(appSettingsProvider.notifier).setLanguage('en');
+                },
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+          Divider(style: DividerThemeData(decoration: BoxDecoration(color: NaiTheme.bg2))),
+          const SizedBox(height: 20),
+
+          // 自動タグ設定（Danbooru関連）
+          Text(
+            '自動タグ設定',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: NaiTheme.text0,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Danbooruデータベースを使用した自動タグ付け機能の詳細設定です。',
+            style: TextStyle(
+              fontSize: 12,
+              color: NaiTheme.text2,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Danbooru DBの状態表示
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: NaiTheme.bg2,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _danbooruStats != null
+                      ? FluentIcons.check_mark
+                      : FluentIcons.status_circle_error_x,
+                  size: 14,
+                  color: _danbooruStats != null
+                      ? NaiTheme.success
+                      : NaiTheme.text2,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _danbooruStats != null
+                        ? 'Danbooru DB: 有効 (${_danbooruStats!.postCountFormatted} posts)'
+                        : 'Danbooru DB: 未設定',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _danbooruStats != null
+                          ? NaiTheme.success
+                          : NaiTheme.text2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          if (_danbooruStats != null) ...[
+            const SizedBox(height: 16),
+
+            // 自動タグ機能の有効/無効
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'インポート時に自動タグ付け',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: NaiTheme.text0,
+                        ),
+                      ),
+                      Text(
+                        '画像インポート時にMD5ハッシュでDanbooruタグを自動取得',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: NaiTheme.text2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ToggleSwitch(
+                  checked: true, // TODO: 設定から読み込む
+                  onChanged: (value) {
+                    // TODO: 設定を保存
+                  },
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildThemeModeButton({
+    required ThemeMode mode,
+    required bool isSelected,
+    required VoidCallback onPressed,
+  }) {
+    return Button(
+      style: ButtonStyle(
+        backgroundColor: WidgetStatePropertyAll(
+          isSelected ? NaiTheme.accent.withAlpha(30) : NaiTheme.bg2,
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(4),
+            side: BorderSide(
+              color: isSelected ? NaiTheme.accent : Colors.transparent,
+              width: 1,
+            ),
+          ),
+        ),
+      ),
+      onPressed: onPressed,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              _getThemeModeIcon(mode),
+              size: 14,
+              color: isSelected ? NaiTheme.accent : NaiTheme.text1,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              _getThemeModeLabel(mode),
+              style: TextStyle(
+                color: isSelected ? NaiTheme.accent : NaiTheme.text1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _getThemeModeIcon(ThemeMode mode) => switch (mode) {
+    ThemeMode.dark => FluentIcons.clear_night,
+    ThemeMode.light => FluentIcons.sunny,
+    ThemeMode.system => FluentIcons.pc1,
+  };
+
+  String _getThemeModeLabel(ThemeMode mode) => switch (mode) {
+    ThemeMode.dark => 'ダーク',
+    ThemeMode.light => 'ライト',
+    ThemeMode.system => 'システム',
+  };
+
+  Widget _buildLanguageButton({
+    required String languageCode,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onPressed,
+  }) {
+    return Button(
+      style: ButtonStyle(
+        backgroundColor: WidgetStatePropertyAll(
+          isSelected ? NaiTheme.accent.withAlpha(30) : NaiTheme.bg2,
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(4),
+            side: BorderSide(
+              color: isSelected ? NaiTheme.accent : Colors.transparent,
+              width: 1,
+            ),
+          ),
+        ),
+      ),
+      onPressed: onPressed,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? NaiTheme.accent : NaiTheme.text1,
+          ),
+        ),
       ),
     );
   }

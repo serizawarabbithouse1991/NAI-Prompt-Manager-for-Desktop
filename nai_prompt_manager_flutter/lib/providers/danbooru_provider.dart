@@ -2,7 +2,10 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../data/repositories/settings_repository.dart';
 import '../data/services/danbooru_tag_service.dart';
+import '../services/danbooru_service.dart';
+import 'database_provider.dart';
 
 /// Danbooruタグサービスの状態
 class DanbooruServiceState {
@@ -39,13 +42,27 @@ class DanbooruServiceState {
 
 /// Danbooruタグサービスのプロバイダー
 class DanbooruServiceNotifier extends StateNotifier<DanbooruServiceState> {
-  DanbooruServiceNotifier() : super(const DanbooruServiceState());
+  final SettingsRepository _settingsRepository;
+
+  DanbooruServiceNotifier(this._settingsRepository) : super(const DanbooruServiceState()) {
+    initialize();
+  }
 
   /// サービスを初期化
   Future<void> initialize() async {
     if (state.initialized) return;
 
-    // デフォルトのDBパスを探索
+    // 1. まず保存されたパスを確認
+    String? savedPath = await _settingsRepository.getDanbooruDbPath();
+    if (savedPath != null) {
+      final file = File(savedPath);
+      if (await file.exists()) {
+        await _openDatabase(savedPath);
+        return;
+      }
+    }
+
+    // 2. デフォルトのDBパスを探索
     final possiblePaths = [
       // カレントディレクトリ
       'danbooru2023.db',
@@ -75,15 +92,24 @@ class DanbooruServiceNotifier extends StateNotifier<DanbooruServiceState> {
       return;
     }
 
+    await _openDatabase(foundPath);
+  }
+
+  /// データベースを開く（内部用）
+  Future<void> _openDatabase(String path) async {
     try {
-      final service = DanbooruTagService(dbPath: foundPath);
+      final service = DanbooruTagService(dbPath: path);
       await service.initialize();
-      
+
+      // DanbooruService（シングルトン）も同じパスで初期化
+      final danbooruService = DanbooruService();
+      await danbooruService.openDatabase(path);
+
       state = state.copyWith(
         service: service,
         initialized: true,
         available: true,
-        dbPath: foundPath,
+        dbPath: path,
         error: null,
       );
     } catch (e) {
@@ -103,14 +129,31 @@ class DanbooruServiceNotifier extends StateNotifier<DanbooruServiceState> {
     return state.service!.analyzePrompt(prompt);
   }
 
-  /// 手動でDBパスを設定
-  Future<void> setDatabasePath(String path) async {
+  /// 手動でDBパスを設定（永続化も行う）
+  Future<bool> setDatabasePath(String path) async {
     state.service?.dispose();
-    
+
     try {
+      final file = File(path);
+      if (!await file.exists()) {
+        state = state.copyWith(
+          initialized: true,
+          available: false,
+          error: 'File not found: $path',
+        );
+        return false;
+      }
+
       final service = DanbooruTagService(dbPath: path);
       await service.initialize();
-      
+
+      // DanbooruService（シングルトン）も同じパスで初期化
+      final danbooruService = DanbooruService();
+      await danbooruService.openDatabase(path);
+
+      // 設定を永続化
+      await _settingsRepository.setDanbooruDbPath(path);
+
       state = state.copyWith(
         service: service,
         initialized: true,
@@ -118,13 +161,34 @@ class DanbooruServiceNotifier extends StateNotifier<DanbooruServiceState> {
         dbPath: path,
         error: null,
       );
+      return true;
     } catch (e) {
       state = state.copyWith(
         initialized: true,
         available: false,
         error: e.toString(),
       );
+      return false;
     }
+  }
+
+  /// データベースを閉じる
+  Future<void> closeDatabase() async {
+    state.service?.dispose();
+
+    // DanbooruService（シングルトン）も閉じる
+    final danbooruService = DanbooruService();
+    danbooruService.close();
+
+    // 設定から削除
+    await _settingsRepository.setDanbooruDbPath(null);
+
+    state = state.copyWith(
+      service: null,
+      available: false,
+      dbPath: null,
+      error: null,
+    );
   }
 
   @override
@@ -137,10 +201,9 @@ class DanbooruServiceNotifier extends StateNotifier<DanbooruServiceState> {
 /// Danbooruサービスプロバイダー
 final danbooruServiceProvider =
     StateNotifierProvider<DanbooruServiceNotifier, DanbooruServiceState>((ref) {
-  final notifier = DanbooruServiceNotifier();
-  // 初期化を自動実行
-  notifier.initialize();
-  return notifier;
+  final db = ref.watch(databaseProvider);
+  final settingsRepository = SettingsRepository(db);
+  return DanbooruServiceNotifier(settingsRepository);
 });
 
 /// プロンプト解析のショートカットプロバイダー
