@@ -4,6 +4,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../themes/nai_theme.dart';
 import 'gallery_screen.dart';
+import 'settings_screen.dart';
 
 /// ホーム画面（メインナビゲーション）
 class HomeScreen extends ConsumerStatefulWidget {
@@ -41,7 +42,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WindowListener {
     PaneItem(
       icon: const Icon(FluentIcons.settings),
       title: const Text('設定'),
-      body: const _PlaceholderPage(title: '設定'),
+      body: const SettingsScreen(),
     ),
   ];
 

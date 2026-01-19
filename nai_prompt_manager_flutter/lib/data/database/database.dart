@@ -21,6 +21,15 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   AppDatabase.forTesting(super.e);
+  
+  /// 既存のDBファイルから接続を作成
+  factory AppDatabase.fromFile(File file) {
+    return AppDatabase._fromExecutor(
+      LazyDatabase(() async => NativeDatabase.createInBackground(file)),
+    );
+  }
+  
+  AppDatabase._fromExecutor(super.e);
 
   @override
   int get schemaVersion => 5;
@@ -132,4 +141,11 @@ LazyDatabase _openConnection() {
 
     return NativeDatabase.createInBackground(file);
   });
+}
+
+/// 既存のTauri DBファイルパスからDrift接続を取得
+Future<AppDatabase?> openTauriDatabase(String path) async {
+  final file = File(path);
+  if (!await file.exists()) return null;
+  return AppDatabase.fromFile(file);
 }
