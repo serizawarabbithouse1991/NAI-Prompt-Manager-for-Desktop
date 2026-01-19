@@ -428,4 +428,132 @@ class ImageRepository {
       rating: data.rating,
     );
   }
+
+  /// タグが付いていない画像を取得
+  Future<List<ImageWithDetails>> getImagesWithoutTags() async {
+    final query = _db.customSelect('''
+      SELECT i.id
+      FROM images i
+      LEFT JOIN image_tags it ON i.id = it.image_id
+      WHERE i.deleted_at IS NULL
+      GROUP BY i.id
+      HAVING COUNT(it.tag_id) = 0
+    ''');
+
+    final results = await query.get();
+    final imageIds = results.map((r) => r.read<String>('id')).toList();
+
+    if (imageIds.isEmpty) return [];
+
+    // 詳細情報を取得
+    final images = <ImageWithDetails>[];
+    for (final id in imageIds) {
+      final image = await getImageById(id);
+      if (image != null) {
+        images.add(image);
+      }
+    }
+
+    return images;
+  }
+
+  /// 全画像IDを取得（バッチ処理用）
+  Future<List<String>> getAllImageIds() async {
+    final query = _db.customSelect('''
+      SELECT id FROM images WHERE deleted_at IS NULL
+    ''');
+
+    final results = await query.get();
+    return results.map((r) => r.read<String>('id')).toList();
+  }
+
+  /// 指定されたIDの画像を一括取得
+  Future<List<ImageWithDetails>> getImagesByIds(List<String> ids) async {
+    if (ids.isEmpty) return [];
+
+    final images = <ImageWithDetails>[];
+    for (final id in ids) {
+      final image = await getImageById(id);
+      if (image != null) {
+        images.add(image);
+      }
+    }
+
+    return images;
+  }
+
+  /// プロンプトをupsert（存在すれば更新、なければ挿入）
+  Future<void> upsertPrompt(Prompt prompt) async {
+    final existing = await (_db.select(_db.prompts)
+      ..where((t) => t.imageId.equals(prompt.imageId)))
+      .getSingleOrNull();
+
+    if (existing != null) {
+      // 既存のプロンプトを更新
+      await (_db.update(_db.prompts)..where((t) => t.imageId.equals(prompt.imageId)))
+          .write(db.PromptsCompanion(
+        positivePrompt: Value(prompt.positivePrompt),
+        negativePrompt: Value(prompt.negativePrompt),
+        model: Value(prompt.model),
+        sampler: Value(prompt.sampler),
+        steps: Value(prompt.steps),
+        cfgScale: Value(prompt.cfgScale),
+        seed: Value(prompt.seed),
+        resolutionWidth: Value(prompt.resolutionWidth),
+        resolutionHeight: Value(prompt.resolutionHeight),
+        noiseSchedule: Value(prompt.noiseSchedule),
+        promptGuidanceRescale: Value(prompt.promptGuidanceRescale),
+        rawMetadata: Value(prompt.rawMetadata),
+        sourceType: Value(prompt.sourceType.value),
+        workflowJson: Value(prompt.workflowJson),
+      ));
+    } else {
+      // 新しいプロンプトを挿入
+      await _db.into(_db.prompts).insert(db.PromptsCompanion.insert(
+        id: prompt.id,
+        imageId: prompt.imageId,
+        positivePrompt: Value(prompt.positivePrompt),
+        negativePrompt: Value(prompt.negativePrompt),
+        model: Value(prompt.model),
+        sampler: Value(prompt.sampler),
+        steps: Value(prompt.steps),
+        cfgScale: Value(prompt.cfgScale),
+        seed: Value(prompt.seed),
+        resolutionWidth: Value(prompt.resolutionWidth),
+        resolutionHeight: Value(prompt.resolutionHeight),
+        noiseSchedule: Value(prompt.noiseSchedule),
+        promptGuidanceRescale: Value(prompt.promptGuidanceRescale),
+        rawMetadata: Value(prompt.rawMetadata),
+        sourceType: Value(prompt.sourceType.value),
+        workflowJson: Value(prompt.workflowJson),
+      ));
+    }
+  }
+
+  /// 全画像IDとファイルパスを取得
+  Future<List<({String id, String filePath})>> getAllImagePaths() async {
+    final query = _db.select(_db.images)
+      ..where((t) => t.deletedAt.isNull());
+    
+    final results = await query.get();
+    return results
+        .map((r) => (id: r.id, filePath: r.filePath))
+        .toList();
+  }
+
+  /// プロンプトなしの画像IDとファイルパスを取得
+  Future<List<({String id, String filePath})>> getImagesWithoutPrompt() async {
+    final query = _db.select(_db.images).join([
+      leftOuterJoin(_db.prompts, _db.prompts.imageId.equalsExp(_db.images.id)),
+    ])
+      ..where(_db.images.deletedAt.isNull() & _db.prompts.id.isNull());
+    
+    final results = await query.get();
+    return results
+        .map((r) {
+          final image = r.readTable(_db.images);
+          return (id: image.id, filePath: image.filePath);
+        })
+        .toList();
+  }
 }

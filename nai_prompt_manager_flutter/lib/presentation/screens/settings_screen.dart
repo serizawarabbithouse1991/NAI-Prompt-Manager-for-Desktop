@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart' hide ThemeMode;
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -6,6 +7,7 @@ import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 import '../../services/services.dart';
 import '../themes/nai_theme.dart';
+import 'bulk_tagging_dialog.dart';
 
 /// 設定画面
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -29,7 +31,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void initState() {
     super.initState();
     _checkTauriDb();
-    _loadDanbooruStats();
+    // Providerを使うため、フレーム後に実行
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _initDanbooruFromProvider();
+    });
   }
 
   Future<void> _checkTauriDb() async {
@@ -47,10 +52,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _checkingTauriDb = false);
   }
 
-  Future<void> _loadDanbooruStats() async {
-    // DanbooruServiceから統計を取得
-    final service = DanbooruService();
-    if (service.isConfigured) {
+  /// Providerを通じてDanbooru DBを初期化し、統計を取得
+  Future<void> _initDanbooruFromProvider() async {
+    // Providerの状態を取得（これによりProviderが初期化される）
+    final danbooruState = ref.read(danbooruServiceProvider);
+    
+    // Providerがまだ初期化中の場合は少し待つ
+    if (!danbooruState.initialized) {
+      // 初期化完了を待つ（最大3秒）
+      for (int i = 0; i < 30; i++) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (!mounted) return;
+        final state = ref.read(danbooruServiceProvider);
+        if (state.initialized) break;
+      }
+    }
+    
+    // 再度状態を取得
+    final state = ref.read(danbooruServiceProvider);
+    
+    // Providerが利用可能ならシングルトンも初期化済み
+    if (state.available) {
+      final service = DanbooruService();
       final stats = await service.getStats();
       if (mounted) {
         setState(() => _danbooruStats = stats);
@@ -363,6 +386,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Widget _buildDanbooruCard() {
+    // Providerの状態をwatchしてリアクティブに更新
+    final danbooruState = ref.watch(danbooruServiceProvider);
+    final isAvailable = danbooruState.available;
+    final isInitialized = danbooruState.initialized;
+
     return Card(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -386,7 +414,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 16),
 
-          if (_loadingDanbooru)
+          if (_loadingDanbooru || !isInitialized)
             const Row(
               children: [
                 ProgressRing(strokeWidth: 2),
@@ -394,7 +422,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Text('読み込み中...'),
               ],
             )
-          else if (_danbooruStats != null)
+          else if (isAvailable || _danbooruStats != null)
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -418,14 +446,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    '投稿数: ${_danbooruStats!.postCountFormatted}',
-                    style: TextStyle(fontSize: 12, color: NaiTheme.text1),
-                  ),
-                  Text(
-                    'タグ数: ${_danbooruStats!.tagCountFormatted}',
-                    style: TextStyle(fontSize: 12, color: NaiTheme.text1),
-                  ),
+                  if (danbooruState.dbPath != null)
+                    Text(
+                      'パス: ${danbooruState.dbPath}',
+                      style: TextStyle(fontSize: 11, color: NaiTheme.text2),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  if (_danbooruStats != null) ...[
+                    Text(
+                      '投稿数: ${_danbooruStats!.postCountFormatted}',
+                      style: TextStyle(fontSize: 12, color: NaiTheme.text1),
+                    ),
+                    Text(
+                      'タグ数: ${_danbooruStats!.tagCountFormatted}',
+                      style: TextStyle(fontSize: 12, color: NaiTheme.text1),
+                    ),
+                  ],
                 ],
               ),
             )
@@ -463,7 +499,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ],
                 ),
               ),
-              if (_danbooruStats != null) ...[
+              if (isAvailable || _danbooruStats != null) ...[
                 const SizedBox(width: 8),
                 Button(
                   onPressed: _closeDanbooruDb,
@@ -1320,43 +1356,50 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Danbooru DBの状態表示
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: NaiTheme.bg2,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  _danbooruStats != null
-                      ? FluentIcons.check_mark
-                      : FluentIcons.status_circle_error_x,
-                  size: 14,
-                  color: _danbooruStats != null
-                      ? NaiTheme.success
-                      : NaiTheme.text2,
+          // Danbooru DBの状態表示（Providerから取得）
+          Builder(
+            builder: (context) {
+              final danbooruState = ref.watch(danbooruServiceProvider);
+              final isAvailable = danbooruState.available;
+              
+              return Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: NaiTheme.bg2,
+                  borderRadius: BorderRadius.circular(4),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _danbooruStats != null
-                        ? 'Danbooru DB: 有効 (${_danbooruStats!.postCountFormatted} posts)'
-                        : 'Danbooru DB: 未設定',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: _danbooruStats != null
+                child: Row(
+                  children: [
+                    Icon(
+                      isAvailable
+                          ? FluentIcons.check_mark
+                          : FluentIcons.status_circle_error_x,
+                      size: 14,
+                      color: isAvailable
                           ? NaiTheme.success
                           : NaiTheme.text2,
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        isAvailable
+                            ? 'Danbooru DB: 有効${_danbooruStats != null ? " (${_danbooruStats!.postCountFormatted} posts)" : ""}'
+                            : 'Danbooru DB: 未設定',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isAvailable
+                              ? NaiTheme.success
+                              : NaiTheme.text2,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
 
-          if (_danbooruStats != null) ...[
+          if (ref.watch(danbooruServiceProvider).available) ...[
             const SizedBox(height: 16),
 
             // 自動タグ機能の有効/無効
@@ -1391,6 +1434,43 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   },
                 ),
               ],
+            ),
+
+            const SizedBox(height: 20),
+            Divider(style: DividerThemeData(decoration: BoxDecoration(color: NaiTheme.bg2))),
+            const SizedBox(height: 20),
+
+            // 手動タグ付け
+            Text(
+              '手動タグ付け',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: NaiTheme.text0,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '既存の画像にDanbooruタグを一括で付与します。全画像または、タグがない画像のみを対象にできます。',
+              style: TextStyle(
+                fontSize: 12,
+                color: NaiTheme.text2,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Button(
+              onPressed: () => BulkTaggingDialog.show(context),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(FluentIcons.tag, size: 14, color: NaiTheme.text1),
+                  const SizedBox(width: 8),
+                  Text(
+                    '手動タグ付けを開始',
+                    style: TextStyle(color: NaiTheme.text1),
+                  ),
+                ],
+              ),
             ),
           ],
         ],

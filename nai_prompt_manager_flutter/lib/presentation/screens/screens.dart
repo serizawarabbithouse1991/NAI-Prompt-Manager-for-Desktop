@@ -9,5 +9,6 @@ export 'prompt_analysis_screen.dart';
 export 'suggestion_screen.dart';
 export 'settings_screen.dart';
 export 'upload_dialog.dart';
+export 'bulk_tagging_dialog.dart';
 export 'search_screen.dart';
 export 'upload_history_screen.dart';
