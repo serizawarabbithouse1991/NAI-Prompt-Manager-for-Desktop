@@ -11,3 +11,4 @@ export 'upload_provider.dart';
 export 'explorer_provider.dart';
 export 'danbooru_provider.dart';
 export 'nsfw_provider.dart';
+export 'suggestion_provider.dart';

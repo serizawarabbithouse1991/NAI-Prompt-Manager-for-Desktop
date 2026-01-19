@@ -6,6 +6,7 @@ import '../themes/nai_theme.dart';
 import 'dashboard_screen.dart';
 import 'gallery_screen.dart';
 import 'prompt_analysis_screen.dart';
+import 'suggestion_screen.dart';
 import 'settings_screen.dart';
 import 'upload_dialog.dart';
 import 'search_screen.dart';
@@ -42,6 +43,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WindowListener {
       icon: const Icon(FluentIcons.chart),
       title: const Text('プロンプト分析'),
       body: const PromptAnalysisScreen(),
+    ),
+    PaneItem(
+      icon: const Icon(FluentIcons.trending12),
+      title: const Text('プロンプト提案'),
+      body: const SuggestionScreen(),
     ),
     PaneItem(
       icon: const Icon(FluentIcons.history),
