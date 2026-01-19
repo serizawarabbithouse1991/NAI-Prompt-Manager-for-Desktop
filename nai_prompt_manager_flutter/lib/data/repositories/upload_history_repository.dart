@@ -1,5 +1,20 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:drift/drift.dart';
 import '../database/database.dart' as db;
+
+// #region agent log
+void _repoDebugLog(String location, String message, Map<String, dynamic> data, String hypothesisId) {
+  final entry = '[DEBUG][$hypothesisId] $location: $message | $data';
+  print(entry);
+  try {
+    final logFile = File(r'c:\Users\rt032\001-WEBDEV\NAI Prompt Manager\.cursor\debug.log');
+    logFile.writeAsStringSync('$entry\n', mode: FileMode.append);
+  } catch (e) {
+    print('[DEBUG] Log write error: $e');
+  }
+}
+// #endregion
 
 /// アップロード履歴リポジトリ
 class UploadHistoryRepository {
@@ -52,18 +67,37 @@ class UploadHistoryRepository {
 
   /// 全履歴を取得（新しい順）
   Future<List<UploadHistoryModel>> getAllHistories() async {
-    final query = _db.select(_db.uploadHistories)
-      ..orderBy([(t) => OrderingTerm.desc(t.uploadedAt)]);
-    final results = await query.get();
-    return results.map(_mapToModel).toList();
+    // #region agent log
+    _repoDebugLog('upload_history_repository.dart:getAllHistories', 'Method called', {}, 'A');
+    // #endregion
+    try {
+      final query = _db.select(_db.uploadHistories)
+        ..orderBy([(t) => OrderingTerm.desc(t.uploadedAt)]);
+      final results = await query.get();
+      // #region agent log
+      _repoDebugLog('upload_history_repository.dart:getAllHistories', 'Query result', {'rawCount': results.length, 'types': results.map((e) => e.type).toSet().toList()}, 'B');
+      // #endregion
+      return results.map(_mapToModel).toList();
+    } catch (e, st) {
+      // #region agent log
+      _repoDebugLog('upload_history_repository.dart:getAllHistories', 'Error', {'error': e.toString(), 'stack': st.toString().substring(0, 300)}, 'A');
+      // #endregion
+      rethrow;
+    }
   }
 
   /// タイプ別に履歴を取得
   Future<List<UploadHistoryModel>> getHistoriesByType(String type) async {
+    // #region agent log
+    _repoDebugLog('upload_history_repository.dart:getHistoriesByType', 'Method called', {'type': type}, 'B');
+    // #endregion
     final query = _db.select(_db.uploadHistories)
       ..where((t) => t.type.equals(type))
       ..orderBy([(t) => OrderingTerm.desc(t.uploadedAt)]);
     final results = await query.get();
+    // #region agent log
+    _repoDebugLog('upload_history_repository.dart:getHistoriesByType', 'Query result', {'type': type, 'count': results.length}, 'B');
+    // #endregion
     return results.map(_mapToModel).toList();
   }
 

@@ -16,9 +16,10 @@ final uploadHistoryRepositoryProvider = Provider<UploadHistoryRepository>((ref) 
 final uploadHistoryListProvider = FutureProvider.family<List<UploadHistoryModel>, String?>((ref, type) async {
   final repo = ref.watch(uploadHistoryRepositoryProvider);
   if (type == null) {
-    return repo.getAllHistories();
+    return await repo.getAllHistories();
+  } else {
+    return await repo.getHistoriesByType(type);
   }
-  return repo.getHistoriesByType(type);
 });
 
 /// アップロード履歴画面
@@ -110,7 +111,12 @@ class _UploadHistoryScreenState extends ConsumerState<UploadHistoryScreen> {
     return ToggleButton(
       checked: isSelected,
       onChanged: (_) {
-        setState(() => _selectedTab = index);
+        if (_selectedTab != index) {
+          final newFilter = _getFilterForTab(index);
+          // キャッシュを無効化して最新データを取得
+          ref.invalidate(uploadHistoryListProvider(newFilter));
+          setState(() => _selectedTab = index);
+        }
       },
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -121,6 +127,19 @@ class _UploadHistoryScreenState extends ConsumerState<UploadHistoryScreen> {
         ],
       ),
     );
+  }
+
+  String? _getFilterForTab(int tab) {
+    switch (tab) {
+      case 1:
+        return 'image';
+      case 2:
+        return 'zip';
+      case 3:
+        return 'folder';
+      default:
+        return null;
+    }
   }
 
   Widget _buildHistoryList(List<UploadHistoryModel> histories) {

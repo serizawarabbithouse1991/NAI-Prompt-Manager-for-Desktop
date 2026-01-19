@@ -289,6 +289,8 @@ class _GalleryScreenState extends ConsumerState<GalleryScreen> {
     final imageState = ref.watch(imageListProvider);
     // Watch explorerState for changes even if not directly used
     ref.watch(explorerProvider);
+    // サムネイルサイズの変更を監視して再ビルドをトリガー
+    ref.watch(thumbnailSizeProvider);
 
     return Focus(
       focusNode: _focusNode,
@@ -734,7 +736,11 @@ class _GalleryScreenState extends ConsumerState<GalleryScreen> {
       );
     }
 
+    // サムネイルサイズをキーに含めて、サイズ変更時に完全リビルドを強制
+    final thumbnailSize = ref.watch(thumbnailSizeProvider);
+    
     return ImageGrid(
+      key: ValueKey('image_grid_${thumbnailSize.pixels}'),
       images: state.images,
       hasMore: state.pagination.hasMore,
       loadingMore: state.loadingMore,

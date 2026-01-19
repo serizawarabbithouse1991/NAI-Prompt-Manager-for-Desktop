@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
@@ -32,6 +33,7 @@ class ImageGrid extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final thumbnailSize = ref.watch(thumbnailSizeProvider);
     final selectedIds = ref.watch(selectedImageIdsProvider);
+    final viewMode = ref.watch(viewModeProvider);
     final itemSize = thumbnailSize.pixels.toDouble() + 16;
 
     return NotificationListener<ScrollNotification>(
@@ -44,32 +46,145 @@ class ImageGrid extends ConsumerWidget {
         }
         return false;
       },
-      child: GridView.builder(
-        key: ValueKey('grid_${thumbnailSize.pixels}'),
-        padding: const EdgeInsets.all(16),
-        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: itemSize,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          childAspectRatio: 1,
+      child: viewMode == ViewMode.list
+          ? _buildListView(context, ref, selectedIds)
+          : _buildGridView(context, ref, selectedIds, itemSize, thumbnailSize),
+    );
+  }
+
+  /// グリッド表示
+  Widget _buildGridView(BuildContext context, WidgetRef ref, Set<String> selectedIds, double itemSize, ThumbnailSize thumbnailSize) {
+    return GridView.builder(
+      key: ValueKey('grid_${thumbnailSize.pixels}'),
+      padding: const EdgeInsets.all(16),
+      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: itemSize,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        childAspectRatio: 1,
+      ),
+      itemCount: images.length + (loadingMore ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index >= images.length) {
+          return const Center(child: ProgressRing());
+        }
+
+        final image = images[index];
+        final isSelected = selectedIds.contains(image.id);
+
+        return ImageTile(
+          key: ValueKey('tile_${image.id}_${thumbnailSize.pixels}'),
+          image: image,
+          isSelected: isSelected,
+          thumbnailSize: thumbnailSize,
+          onTap: () => _handleTap(context, ref, image, isSelected, index),
+          onDoubleTap: () => _handleDoubleTap(context, ref, image),
+          onSecondaryTapUp: (details) => _handleSecondaryTap(context, ref, image, details),
+        );
+      },
+    );
+  }
+
+  /// リスト表示（Windows 11 エクスプローラー風）
+  Widget _buildListView(BuildContext context, WidgetRef ref, Set<String> selectedIds) {
+    return Column(
+      children: [
+        // ヘッダー行
+        _buildListHeader(),
+        // リスト本体
+        Expanded(
+          child: ListView.builder(
+            key: const ValueKey('list_view'),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            itemCount: images.length + (loadingMore ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index >= images.length) {
+                return const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(child: ProgressRing()),
+                );
+              }
+
+              final image = images[index];
+              final isSelected = selectedIds.contains(image.id);
+
+              return ImageListItem(
+                image: image,
+                isSelected: isSelected,
+                onTap: () => _handleTap(context, ref, image, isSelected, index),
+                onDoubleTap: () => _handleDoubleTap(context, ref, image),
+                onSecondaryTapUp: (details) => _handleSecondaryTap(context, ref, image, details),
+              );
+            },
+          ),
         ),
-        itemCount: images.length + (loadingMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index >= images.length) {
-            return const Center(child: ProgressRing());
-          }
+      ],
+    );
+  }
 
-          final image = images[index];
-          final isSelected = selectedIds.contains(image.id);
-
-          return ImageTile(
-            image: image,
-            isSelected: isSelected,
-            onTap: () => _handleTap(context, ref, image, isSelected, index),
-            onDoubleTap: () => _handleDoubleTap(context, ref, image),
-            onSecondaryTapUp: (details) => _handleSecondaryTap(context, ref, image, details),
-          );
-        },
+  /// リストヘッダー
+  Widget _buildListHeader() {
+    return Container(
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: NaiTheme.bg1,
+        border: Border(
+          bottom: BorderSide(color: NaiTheme.bg3, width: 1),
+        ),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 48), // サムネイル用スペース
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 3,
+            child: Text(
+              '名前',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: NaiTheme.text1,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 100,
+            child: Text(
+              '更新日時',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: NaiTheme.text1,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 80,
+            child: Text(
+              'サイズ',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: NaiTheme.text1,
+              ),
+              textAlign: TextAlign.right,
+            ),
+          ),
+          SizedBox(
+            width: 80,
+            child: Text(
+              '解像度',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: NaiTheme.text1,
+              ),
+              textAlign: TextAlign.right,
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
     );
   }
@@ -134,6 +249,7 @@ class ImageTile extends ConsumerStatefulWidget {
   final VoidCallback onTap;
   final VoidCallback onDoubleTap;
   final void Function(TapUpDetails)? onSecondaryTapUp;
+  final ThumbnailSize thumbnailSize;
 
   const ImageTile({
     super.key,
@@ -142,6 +258,7 @@ class ImageTile extends ConsumerStatefulWidget {
     required this.onTap,
     required this.onDoubleTap,
     this.onSecondaryTapUp,
+    this.thumbnailSize = ThumbnailSize.medium,
   });
 
   @override
@@ -186,7 +303,7 @@ class _ImageTileState extends ConsumerState<ImageTile> {
               fit: StackFit.expand,
               children: [
                 // サムネイル（ぼかし付き）
-                _buildThumbnail(shouldBlur),
+                _buildThumbnail(context, shouldBlur),
                 
                 // ぼかし解除オーバーレイ
                 if (shouldBlur && _isHovered)
@@ -298,19 +415,31 @@ class _ImageTileState extends ConsumerState<ImageTile> {
     );
   }
 
-  Widget _buildThumbnail(bool shouldBlur) {
+  Widget _buildThumbnail(BuildContext context, bool shouldBlur) {
     final thumbnailPath = widget.image.thumbnailPath;
     final filePath = widget.image.filePath;
 
-    // サムネイルがあればそれを使用
-    final path = thumbnailPath ?? filePath;
+    // 大きいサムネイルサイズ（200px以上）の場合は元画像を使用して高品質表示
+    // 小さいサイズの場合はサムネイルを使用してメモリ節約
+    final useOriginal = widget.thumbnailSize.pixels >= 200;
+    final path = useOriginal ? filePath : (thumbnailPath ?? filePath);
     final file = File(path);
 
     Widget thumbnail;
     if (file.existsSync()) {
+      // HiDPI対応: デバイスピクセル比を考慮してキャッシュサイズを計算
+      final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+      // 高品質表示のため、最低でも2倍のキャッシュサイズを確保
+      final minScale = useOriginal ? 2.0 : 1.0;
+      final scale = devicePixelRatio > minScale ? devicePixelRatio : minScale;
+      final cacheSize = (widget.thumbnailSize.pixels * scale).toInt();
+      
       thumbnail = Image.file(
         file,
         fit: BoxFit.cover,
+        filterQuality: FilterQuality.high,
+        cacheWidth: cacheSize,
+        // cacheHeightは指定しない（アスペクト比を維持するため自動計算）
         errorBuilder: (context, error, stackTrace) {
           return _buildPlaceholder();
         },
@@ -378,5 +507,212 @@ class _ImageTileState extends ConsumerState<ImageTile> {
             )
           : null,
     );
+  }
+}
+
+/// リスト表示用アイテム（Windows 11 エクスプローラー風）
+class ImageListItem extends ConsumerStatefulWidget {
+  final ImageWithDetails image;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final VoidCallback onDoubleTap;
+  final void Function(TapUpDetails)? onSecondaryTapUp;
+
+  const ImageListItem({
+    super.key,
+    required this.image,
+    required this.isSelected,
+    required this.onTap,
+    required this.onDoubleTap,
+    this.onSecondaryTapUp,
+  });
+
+  @override
+  ConsumerState<ImageListItem> createState() => _ImageListItemState();
+}
+
+class _ImageListItemState extends ConsumerState<ImageListItem> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final dateFormat = DateFormat('yyyy/MM/dd');
+    final modifiedDate = widget.image.createdAt;
+    final isNsfw = widget.image.isNsfw == true;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        onDoubleTap: widget.onDoubleTap,
+        onSecondaryTapUp: widget.onSecondaryTapUp,
+        child: Container(
+          height: 40,
+          margin: const EdgeInsets.symmetric(vertical: 1),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: widget.isSelected
+                ? NaiTheme.accent.withAlpha(40)
+                : _isHovered
+                    ? NaiTheme.bg2
+                    : Colors.transparent,
+            borderRadius: BorderRadius.circular(4),
+            border: widget.isSelected
+                ? Border.all(color: NaiTheme.accent, width: 1)
+                : null,
+          ),
+          child: Row(
+            children: [
+              // サムネイル
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  color: NaiTheme.bg2,
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: _buildMiniThumbnail(),
+              ),
+              const SizedBox(width: 12),
+              
+              // ファイル名
+              Expanded(
+                flex: 3,
+                child: Row(
+                  children: [
+                    // お気に入りアイコン
+                    if (widget.image.rating?.isFavorite == true)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: Icon(
+                          FluentIcons.heart_fill,
+                          size: 12,
+                          color: NaiTheme.error,
+                        ),
+                      ),
+                    // NSFWバッジ
+                    if (isNsfw)
+                      Container(
+                        margin: const EdgeInsets.only(right: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: NaiTheme.warning.withAlpha(200),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        child: Text(
+                          'NSFW',
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            color: NaiTheme.bg0,
+                          ),
+                        ),
+                      ),
+                    Expanded(
+                      child: Text(
+                        widget.image.filename ?? 'Unknown',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: widget.isSelected ? NaiTheme.accent : NaiTheme.text0,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    // タグ数
+                    if (widget.image.tags.isNotEmpty)
+                      Container(
+                        margin: const EdgeInsets.only(left: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: NaiTheme.bg3,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(FluentIcons.tag, size: 10, color: NaiTheme.text2),
+                            const SizedBox(width: 2),
+                            Text(
+                              '${widget.image.tags.length}',
+                              style: TextStyle(fontSize: 10, color: NaiTheme.text2),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              
+              // 更新日時
+              SizedBox(
+                width: 100,
+                child: Text(
+                  dateFormat.format(modifiedDate),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: NaiTheme.text2,
+                  ),
+                ),
+              ),
+              
+              // ファイルサイズ
+              SizedBox(
+                width: 80,
+                child: Text(
+                  _formatFileSize(widget.image.fileSize ?? 0),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: NaiTheme.text2,
+                  ),
+                  textAlign: TextAlign.right,
+                ),
+              ),
+              
+              // 解像度
+              SizedBox(
+                width: 80,
+                child: Text(
+                  widget.image.width != null && widget.image.height != null
+                      ? '${widget.image.width}x${widget.image.height}'
+                      : '-',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: NaiTheme.text2,
+                  ),
+                  textAlign: TextAlign.right,
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMiniThumbnail() {
+    final thumbnailPath = widget.image.thumbnailPath;
+    final filePath = widget.image.filePath;
+    final path = thumbnailPath ?? filePath;
+    final file = File(path);
+
+    if (file.existsSync()) {
+      return Image.file(
+        file,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Icon(FluentIcons.photo2, size: 16, color: NaiTheme.text2);
+        },
+      );
+    }
+    return Icon(FluentIcons.photo2, size: 16, color: NaiTheme.text2);
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 import '../themes/nai_theme.dart';
+import '../screens/upload_dialog.dart';
 
 /// エクスプローラーペイン（左サイドバー）
 class ExplorerPane extends ConsumerWidget {
@@ -18,6 +19,41 @@ class ExplorerPane extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // アップロードボタン（目立つ位置に配置）
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: FilledButton(
+            style: ButtonStyle(
+              padding: WidgetStatePropertyAll(
+                const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              ),
+              backgroundColor: WidgetStatePropertyAll(NaiTheme.accent),
+            ),
+            onPressed: () {
+              UploadDialog.show(context);
+            },
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(FluentIcons.upload, size: 16, color: NaiTheme.bg0),
+                const SizedBox(width: 8),
+                Text(
+                  'アップロード',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: NaiTheme.bg0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        
+        const Divider(style: DividerThemeData(
+          horizontalMargin: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        )),
+        
         // クイックアクセス
         _buildSection(
           title: 'クイックアクセス',

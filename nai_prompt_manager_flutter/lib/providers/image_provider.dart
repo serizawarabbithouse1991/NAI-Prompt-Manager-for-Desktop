@@ -242,12 +242,17 @@ class ImageListNotifier extends StateNotifier<ImageListState> {
   }
 }
 
+/// NSFW表示設定のみを監視するプロバイダー（サムネイルサイズ変更で再作成されないように分離）
+final showNsfwSettingProvider = Provider<bool>((ref) {
+  return ref.watch(appSettingsProvider.select((state) => state.settings.showNSFW));
+});
+
 /// 画像リストのプロバイダー
 final imageListProvider =
     StateNotifierProvider<ImageListNotifier, ImageListState>((ref) {
   final repository = ref.watch(imageRepositoryProvider);
-  final appSettings = ref.watch(appSettingsProvider).settings;
-  return ImageListNotifier(repository, showNsfw: appSettings.showNSFW);
+  final showNsfw = ref.watch(showNsfwSettingProvider);
+  return ImageListNotifier(repository, showNsfw: showNsfw);
 });
 
 /// 選択中の画像IDリスト
