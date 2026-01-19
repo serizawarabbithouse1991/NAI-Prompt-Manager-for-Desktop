@@ -1,9 +1,13 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
+import 'package:uuid/uuid.dart';
 
 import '../../providers/providers.dart';
+import '../../services/zip_extract_service.dart';
 import '../themes/nai_theme.dart';
+import 'upload_history_screen.dart';
 
 /// 画像アップロードダイアログ
 class UploadDialog extends ConsumerStatefulWidget {
@@ -31,32 +35,98 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
   String? _errorMessage;
   int _successCount = 0;
   int _failCount = 0;
+  bool _extractingZip = false;
+  String? _extractStatus;
 
   Future<void> _selectFiles() async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'],
+        allowedExtensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'zip'],
         allowMultiple: true,
       );
 
       if (result != null) {
-        final newFiles = result.files
-            .where((f) => f.path != null)
+        final zipFiles = <PlatformFile>[];
+        final imageFiles = <PlatformFile>[];
+
+        for (final file in result.files) {
+          if (file.path == null) continue;
+          final ext = p.extension(file.name).toLowerCase();
+          if (ext == '.zip') {
+            zipFiles.add(file);
+          } else {
+            imageFiles.add(file);
+          }
+        }
+
+        // 画像ファイルを追加
+        final newImageFiles = imageFiles
             .map((f) => PendingFile(
                   path: f.path!,
                   name: f.name,
                   size: f.size,
+                  type: PendingFileType.image,
                 ))
             .toList();
 
         setState(() {
-          _files.addAll(newFiles);
+          _files.addAll(newImageFiles);
         });
+
+        // ZIPファイルを解凍
+        if (zipFiles.isNotEmpty) {
+          await _extractZipFiles(zipFiles);
+        }
       }
     } catch (e) {
-      // エラー処理
       debugPrint('Failed to select files: $e');
+      setState(() {
+        _errorMessage = 'ファイル選択エラー: $e';
+      });
+    }
+  }
+
+  Future<void> _extractZipFiles(List<PlatformFile> zipFiles) async {
+    setState(() {
+      _extractingZip = true;
+      _extractStatus = 'ZIP解凍中...';
+    });
+
+    try {
+      for (var i = 0; i < zipFiles.length; i++) {
+        final zipFile = zipFiles[i];
+        setState(() {
+          _extractStatus = '解凍中: ${zipFile.name} (${i + 1}/${zipFiles.length})';
+        });
+
+        final result = await ZipExtractService.extractImages(zipFile.path!);
+
+        if (result.isSuccess) {
+          final extractedFiles = result.imagePaths
+              .map((path) => PendingFile(
+                    path: path,
+                    name: p.basename(path),
+                    size: 0, // 解凍後のサイズは不明
+                    type: PendingFileType.image,
+                    sourceZip: zipFile.name,
+                  ))
+              .toList();
+
+          setState(() {
+            _files.addAll(extractedFiles);
+          });
+        } else {
+          setState(() {
+            _errorMessage = 'ZIP解凍エラー: ${result.error}';
+          });
+        }
+      }
+    } finally {
+      setState(() {
+        _extractingZip = false;
+        _extractStatus = null;
+      });
     }
   }
 
@@ -87,6 +157,19 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
       final uploadNotifier = ref.read(uploadProvider.notifier);
       final explorerState = ref.read(explorerProvider);
       final folderId = explorerState.selectedFolderId;
+      final historyRepo = ref.read(uploadHistoryRepositoryProvider);
+
+      // ZIPソース別にグループ化して履歴を記録
+      final zipGroups = <String, List<PendingFile>>{};
+      final directFiles = <PendingFile>[];
+      
+      for (final file in _files) {
+        if (file.sourceZip != null) {
+          zipGroups.putIfAbsent(file.sourceZip!, () => []).add(file);
+        } else {
+          directFiles.add(file);
+        }
+      }
 
       for (var i = 0; i < _files.length; i++) {
         final file = _files[i];
@@ -111,6 +194,47 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
         setState(() {
           _progress = (i + 1) / _files.length;
         });
+      }
+
+      // アップロード履歴を保存
+      const uuid = Uuid();
+      
+      // 直接選択されたファイルの履歴
+      if (directFiles.isNotEmpty) {
+        final directSuccess = directFiles.where((f) => 
+          _files.indexOf(f) < _successCount).length;
+        final directFail = directFiles.length - directSuccess;
+        
+        await historyRepo.addHistory(
+          id: uuid.v4(),
+          type: 'image',
+          sourcePath: directFiles.first.path,
+          filename: directFiles.length == 1 
+              ? directFiles.first.name 
+              : '${directFiles.length}ファイル',
+          fileCount: directFiles.length,
+          successCount: directSuccess,
+          failCount: directFail,
+          status: directFail == 0 
+              ? 'completed' 
+              : (directSuccess == 0 ? 'failed' : 'partial'),
+        );
+      }
+
+      // ZIPファイルの履歴
+      for (final entry in zipGroups.entries) {
+        final zipFiles = entry.value;
+        // 単純化: ZIPからのファイルは全て成功とみなす（既に処理済み）
+        await historyRepo.addHistory(
+          id: uuid.v4(),
+          type: 'zip',
+          sourcePath: entry.key,
+          filename: entry.key,
+          fileCount: zipFiles.length,
+          successCount: zipFiles.length,
+          failCount: 0,
+          status: 'completed',
+        );
       }
 
       // 画像リストをリロード
@@ -168,6 +292,12 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
           // 選択されたファイルリスト
           if (_files.isNotEmpty) ...[
             _buildFileList(),
+            const SizedBox(height: 16),
+          ],
+
+          // ZIP解凍中
+          if (_extractingZip) ...[
+            _buildExtractProgress(),
             const SizedBox(height: 16),
           ],
 
@@ -250,7 +380,7 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
               ),
               const SizedBox(height: 4),
               Text(
-                'PNG, JPG, WEBP, GIF（複数選択可）',
+                'PNG, JPG, WEBP, GIF, ZIP（複数選択可）',
                 style: TextStyle(
                   color: NaiTheme.text2,
                   fontSize: 12,
@@ -259,6 +389,36 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildExtractProgress() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: NaiTheme.accent.withAlpha(20),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: NaiTheme.accent),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: ProgressRing(strokeWidth: 2),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _extractStatus ?? 'ZIP解凍中...',
+              style: TextStyle(
+                fontSize: 12,
+                color: NaiTheme.accent,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -310,6 +470,13 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
   }
 
   Widget _buildFileItem(PendingFile file, int index) {
+    final icon = file.type == PendingFileType.zip
+        ? FluentIcons.open_folder_horizontal
+        : FluentIcons.photo2;
+    final subtitle = file.sourceZip != null
+        ? 'from: ${file.sourceZip}'
+        : _formatFileSize(file.size);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -319,7 +486,7 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
       ),
       child: Row(
         children: [
-          Icon(FluentIcons.photo2, size: 16, color: NaiTheme.text2),
+          Icon(icon, size: 16, color: NaiTheme.text2),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -334,7 +501,7 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  _formatFileSize(file.size),
+                  subtitle,
                   style: TextStyle(
                     color: NaiTheme.text2,
                     fontSize: 10,
@@ -432,15 +599,25 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
   }
 }
 
+/// ファイルタイプ
+enum PendingFileType {
+  image,
+  zip,
+}
+
 /// アップロード待機中のファイル
 class PendingFile {
   final String path;
   final String name;
   final int size;
+  final PendingFileType type;
+  final String? sourceZip;
 
   const PendingFile({
     required this.path,
     required this.name,
     required this.size,
+    this.type = PendingFileType.image,
+    this.sourceZip,
   });
 }

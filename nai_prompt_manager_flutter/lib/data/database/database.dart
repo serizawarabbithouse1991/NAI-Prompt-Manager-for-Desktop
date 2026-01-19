@@ -16,6 +16,7 @@ part 'database.g.dart';
   ImageTags,
   ImageRatings,
   Settings,
+  UploadHistories,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
@@ -32,7 +33,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase._fromExecutor(super.e);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration {
@@ -67,6 +68,14 @@ class AppDatabase extends _$AppDatabase {
           // V5: FTS5 - 既存DBとの互換性のためスキップ可能
           // FTS5はSQLite拡張機能のため、必要に応じて有効化
           await _createFTSTables();
+        }
+        if (from < 6) {
+          // V6: Upload history
+          await m.createTable(uploadHistories);
+          await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_upload_histories_type ON upload_histories(type)');
+          await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_upload_histories_uploaded ON upload_histories(uploaded_at)');
         }
       },
       beforeOpen: (details) async {

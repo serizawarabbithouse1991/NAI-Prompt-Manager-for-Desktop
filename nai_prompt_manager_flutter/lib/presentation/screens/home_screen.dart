@@ -9,6 +9,7 @@ import 'prompt_analysis_screen.dart';
 import 'settings_screen.dart';
 import 'upload_dialog.dart';
 import 'search_screen.dart';
+import 'upload_history_screen.dart';
 
 /// ホーム画面（メインナビゲーション）
 class HomeScreen extends ConsumerStatefulWidget {
@@ -41,6 +42,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WindowListener {
       icon: const Icon(FluentIcons.chart),
       title: const Text('プロンプト分析'),
       body: const PromptAnalysisScreen(),
+    ),
+    PaneItem(
+      icon: const Icon(FluentIcons.history),
+      title: const Text('履歴'),
+      body: const UploadHistoryScreen(),
     ),
     PaneItemSeparator(),
     PaneItem(

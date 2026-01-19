@@ -101,3 +101,19 @@ class Settings extends Table {
   @override
   Set<Column> get primaryKey => {key};
 }
+
+/// アップロード履歴テーブル
+class UploadHistories extends Table {
+  TextColumn get id => text()();
+  TextColumn get type => text()(); // 'image', 'zip', 'folder'
+  TextColumn get sourcePath => text()();
+  TextColumn get filename => text()();
+  IntColumn get fileCount => integer().withDefault(const Constant(1))();
+  IntColumn get successCount => integer().withDefault(const Constant(0))();
+  IntColumn get failCount => integer().withDefault(const Constant(0))();
+  TextColumn get status => text()(); // 'completed', 'failed', 'partial'
+  DateTimeColumn get uploadedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}

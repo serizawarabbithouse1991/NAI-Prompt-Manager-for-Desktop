@@ -130,6 +130,46 @@ class TagRepository {
     return rows.map((row) => _mapTag(row)).toList();
   }
 
+  /// タグ名で検索（完全一致）
+  Future<Tag?> findTagByName(String name) async {
+    final normalizedName = name.toLowerCase().trim();
+    final row = await (_db.select(_db.tags)
+          ..where((t) => t.name.equals(normalizedName)))
+        .getSingleOrNull();
+
+    return row != null ? _mapTag(row) : null;
+  }
+
+  /// タグを挿入
+  Future<void> insertTag(Tag tag) async {
+    await _db.into(_db.tags).insert(
+      db.TagsCompanion.insert(
+        id: tag.id,
+        name: tag.name.toLowerCase(),
+        color: Value(tag.color),
+      ),
+      mode: InsertMode.insertOrIgnore,
+    );
+  }
+
+  /// 画像にタグを関連付け
+  Future<void> addTagToImage(String imageId, String tagId) async {
+    await _db.into(_db.imageTags).insert(
+      db.ImageTagsCompanion.insert(
+        imageId: imageId,
+        tagId: tagId,
+      ),
+      mode: InsertMode.insertOrIgnore,
+    );
+  }
+
+  /// 画像からタグを削除
+  Future<void> removeTagFromImage(String imageId, String tagId) async {
+    await (_db.delete(_db.imageTags)
+          ..where((t) => t.imageId.equals(imageId) & t.tagId.equals(tagId)))
+        .go();
+  }
+
   /// DriftのTagをモデルのTagにマッピング
   Tag _mapTag(db.Tag data) {
     return Tag(

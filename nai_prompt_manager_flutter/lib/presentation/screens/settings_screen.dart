@@ -18,10 +18,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _checkingTauriDb = false;
   String? _importStatus;
 
+  // Danbooru DB
+  DanbooruDbStats? _danbooruStats;
+  bool _loadingDanbooru = false;
+  String? _danbooruStatus;
+
   @override
   void initState() {
     super.initState();
     _checkTauriDb();
+    _checkDanbooruDb();
   }
 
   Future<void> _checkTauriDb() async {
@@ -37,6 +43,55 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
     
     setState(() => _checkingTauriDb = false);
+  }
+
+  Future<void> _checkDanbooruDb() async {
+    final service = DanbooruService();
+    if (service.isConfigured) {
+      final stats = await service.getStats();
+      setState(() => _danbooruStats = stats);
+    }
+  }
+
+  Future<void> _selectDanbooruDb() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['db', 'sqlite', 'sqlite3'],
+    );
+
+    if (result != null && result.files.single.path != null) {
+      setState(() {
+        _loadingDanbooru = true;
+        _danbooruStatus = null;
+      });
+
+      final path = result.files.single.path!;
+      final service = DanbooruService();
+      final success = await service.openDatabase(path);
+
+      if (success) {
+        final stats = await service.getStats();
+        setState(() {
+          _danbooruStats = stats;
+          _danbooruStatus = 'Danbooru DBを読み込みました';
+          _loadingDanbooru = false;
+        });
+      } else {
+        setState(() {
+          _danbooruStatus = '無効なDanbooru DBファイルです';
+          _loadingDanbooru = false;
+        });
+      }
+    }
+  }
+
+  void _closeDanbooruDb() {
+    final service = DanbooruService();
+    service.close();
+    setState(() {
+      _danbooruStats = null;
+      _danbooruStatus = 'Danbooru DBを閉じました';
+    });
   }
 
   Future<void> _importTauriDb() async {
@@ -86,6 +141,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           icon: FluentIcons.database,
           children: [
             _buildTauriDbCard(),
+          ],
+        ),
+        const SizedBox(height: 24),
+        _buildSection(
+          title: 'Danbooru自動タグ付け',
+          icon: FluentIcons.tag,
+          children: [
+            _buildDanbooruCard(),
           ],
         ),
         const SizedBox(height: 24),
@@ -264,6 +327,141 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               style: TextStyle(
                 fontSize: 12,
                 color: _importStatus!.contains('エラー')
+                    ? NaiTheme.error
+                    : NaiTheme.success,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDanbooruCard() {
+    return Card(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Danbooru DBによる自動タグ付け',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: NaiTheme.text0,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'danbooru.dbをインポートすると、画像のMD5ハッシュに基づいてDanbooruタグが自動的に付与されます。',
+            style: TextStyle(
+              fontSize: 13,
+              color: NaiTheme.text2,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          if (_loadingDanbooru)
+            const Row(
+              children: [
+                ProgressRing(strokeWidth: 2),
+                SizedBox(width: 8),
+                Text('読み込み中...'),
+              ],
+            )
+          else if (_danbooruStats != null)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: NaiTheme.bg2,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(FluentIcons.tag, size: 14, color: NaiTheme.success),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Danbooru DBが設定されています',
+                        style: TextStyle(
+                          color: NaiTheme.success,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '投稿数: ${_danbooruStats!.postCountFormatted}',
+                    style: TextStyle(fontSize: 12, color: NaiTheme.text1),
+                  ),
+                  Text(
+                    'タグ数: ${_danbooruStats!.tagCountFormatted}',
+                    style: TextStyle(fontSize: 12, color: NaiTheme.text1),
+                  ),
+                ],
+              ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: NaiTheme.bg2,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                children: [
+                  Icon(FluentIcons.info, size: 14, color: NaiTheme.text2),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Danbooru DBが設定されていません',
+                    style: TextStyle(color: NaiTheme.text2),
+                  ),
+                ],
+              ),
+            ),
+
+          const SizedBox(height: 16),
+
+          Row(
+            children: [
+              Button(
+                onPressed: _selectDanbooruDb,
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(FluentIcons.folder_open, size: 14),
+                    SizedBox(width: 6),
+                    Text('DBファイルを選択'),
+                  ],
+                ),
+              ),
+              if (_danbooruStats != null) ...[
+                const SizedBox(width: 8),
+                Button(
+                  onPressed: _closeDanbooruDb,
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(FluentIcons.cancel, size: 14),
+                      SizedBox(width: 6),
+                      Text('解除'),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+
+          if (_danbooruStatus != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _danbooruStatus!,
+              style: TextStyle(
+                fontSize: 12,
+                color: _danbooruStatus!.contains('無効')
                     ? NaiTheme.error
                     : NaiTheme.success,
               ),

@@ -216,7 +216,8 @@ class UploadNotifier extends StateNotifier<UploadState> {
 /// アップロードのプロバイダー
 final uploadProvider = StateNotifierProvider<UploadNotifier, UploadState>((ref) {
   final imageRepository = ref.watch(imageRepositoryProvider);
-  final importService = ImageImportService(imageRepository);
+  final tagRepository = ref.watch(tagRepositoryProvider);
+  final importService = ImageImportService(imageRepository, tagRepository);
   return UploadNotifier(importService);
 });
 

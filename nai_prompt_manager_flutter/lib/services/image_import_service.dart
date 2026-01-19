@@ -9,13 +9,15 @@ import '../data/models/models.dart';
 import '../data/repositories/repositories.dart';
 import 'png_metadata_service.dart';
 import 'thumbnail_service.dart';
+import 'danbooru_service.dart';
 
 /// 画像インポートサービス
 class ImageImportService {
   final ImageRepository _imageRepository;
+  final TagRepository? _tagRepository;
   static const _uuid = Uuid();
 
-  ImageImportService(this._imageRepository);
+  ImageImportService(this._imageRepository, [this._tagRepository]);
 
   /// 画像ファイルをインポート
   Future<ImportResult> importImage({
@@ -116,7 +118,13 @@ class ImageImportService {
       // DBに保存
       await _imageRepository.insertImage(imageModel, prompt);
 
-      return ImportResult.success(imageModel, prompt);
+      // Danbooru自動タグ付け
+      List<String> autoTags = [];
+      if (_tagRepository != null) {
+        autoTags = await _applyDanbooruTags(id, fileHash);
+      }
+
+      return ImportResult.success(imageModel, prompt, autoTags: autoTags);
     } catch (e) {
       return ImportResult.error('インポート失敗: $e');
     }
@@ -169,6 +177,62 @@ class ImageImportService {
     return sha256.convert(bytes).toString();
   }
 
+  /// MD5ハッシュを計算（Danbooru用）
+  String _calculateMd5(Uint8List bytes) {
+    return md5.convert(bytes).toString();
+  }
+
+  /// Danbooruタグを自動付与
+  Future<List<String>> _applyDanbooruTags(String imageId, String fileHash) async {
+    final service = DanbooruService();
+    if (!service.isConfigured || _tagRepository == null) {
+      return [];
+    }
+
+    try {
+      // ファイルを読み込んでMD5を計算
+      final image = await _imageRepository.getImageById(imageId);
+      if (image == null) return [];
+
+      final file = File(image.filePath);
+      if (!await file.exists()) return [];
+
+      final bytes = await file.readAsBytes();
+      final md5Hash = _calculateMd5(bytes);
+
+      // Danbooruからタグを取得
+      final danbooruTags = await service.getTagsByMd5(md5Hash);
+      if (danbooruTags.isEmpty) return [];
+
+      // 人気タグを上位50件に制限
+      final topTags = service.getTopTags(danbooruTags, limit: 50);
+      final appliedTags = <String>[];
+
+      for (final dTag in topTags) {
+        // タグが存在するか確認、なければ作成
+        var tag = await _tagRepository.findTagByName(dTag.name);
+        if (tag == null) {
+          final newTag = Tag(
+            id: _uuid.v4(),
+            name: dTag.name,
+            createdAt: DateTime.now(),
+          );
+          await _tagRepository.insertTag(newTag);
+          tag = newTag;
+        }
+
+        // 画像にタグを関連付け
+        await _tagRepository.addTagToImage(imageId, tag.id);
+        appliedTags.add(tag.name);
+      }
+
+      return appliedTags;
+    } catch (e) {
+      // エラーは無視して空リストを返す
+      return [];
+    }
+  }
+
   /// 画像ディレクトリを取得
   static Future<Directory> getImagesDirectory() async {
     final appDir = await getApplicationSupportDirectory();
@@ -187,6 +251,7 @@ class ImportResult {
   final Prompt? prompt;
   final String? error;
   final String? duplicateHash;
+  final List<String> autoTags;
 
   const ImportResult._({
     required this.status,
@@ -194,13 +259,15 @@ class ImportResult {
     this.prompt,
     this.error,
     this.duplicateHash,
+    this.autoTags = const [],
   });
 
-  factory ImportResult.success(ImageModel image, Prompt? prompt) {
+  factory ImportResult.success(ImageModel image, Prompt? prompt, {List<String> autoTags = const []}) {
     return ImportResult._(
       status: ImportStatus.success,
       image: image,
       prompt: prompt,
+      autoTags: autoTags,
     );
   }
 

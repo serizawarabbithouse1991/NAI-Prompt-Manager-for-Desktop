@@ -3349,6 +3349,563 @@ class SettingsCompanion extends UpdateCompanion<Setting> {
   }
 }
 
+class $UploadHistoriesTable extends UploadHistories
+    with TableInfo<$UploadHistoriesTable, UploadHistory> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $UploadHistoriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _typeMeta = const VerificationMeta('type');
+  @override
+  late final GeneratedColumn<String> type = GeneratedColumn<String>(
+    'type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourcePathMeta = const VerificationMeta(
+    'sourcePath',
+  );
+  @override
+  late final GeneratedColumn<String> sourcePath = GeneratedColumn<String>(
+    'source_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _filenameMeta = const VerificationMeta(
+    'filename',
+  );
+  @override
+  late final GeneratedColumn<String> filename = GeneratedColumn<String>(
+    'filename',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _fileCountMeta = const VerificationMeta(
+    'fileCount',
+  );
+  @override
+  late final GeneratedColumn<int> fileCount = GeneratedColumn<int>(
+    'file_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _successCountMeta = const VerificationMeta(
+    'successCount',
+  );
+  @override
+  late final GeneratedColumn<int> successCount = GeneratedColumn<int>(
+    'success_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _failCountMeta = const VerificationMeta(
+    'failCount',
+  );
+  @override
+  late final GeneratedColumn<int> failCount = GeneratedColumn<int>(
+    'fail_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _uploadedAtMeta = const VerificationMeta(
+    'uploadedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> uploadedAt = GeneratedColumn<DateTime>(
+    'uploaded_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    type,
+    sourcePath,
+    filename,
+    fileCount,
+    successCount,
+    failCount,
+    status,
+    uploadedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'upload_histories';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<UploadHistory> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('type')) {
+      context.handle(
+        _typeMeta,
+        type.isAcceptableOrUnknown(data['type']!, _typeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_typeMeta);
+    }
+    if (data.containsKey('source_path')) {
+      context.handle(
+        _sourcePathMeta,
+        sourcePath.isAcceptableOrUnknown(data['source_path']!, _sourcePathMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourcePathMeta);
+    }
+    if (data.containsKey('filename')) {
+      context.handle(
+        _filenameMeta,
+        filename.isAcceptableOrUnknown(data['filename']!, _filenameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_filenameMeta);
+    }
+    if (data.containsKey('file_count')) {
+      context.handle(
+        _fileCountMeta,
+        fileCount.isAcceptableOrUnknown(data['file_count']!, _fileCountMeta),
+      );
+    }
+    if (data.containsKey('success_count')) {
+      context.handle(
+        _successCountMeta,
+        successCount.isAcceptableOrUnknown(
+          data['success_count']!,
+          _successCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('fail_count')) {
+      context.handle(
+        _failCountMeta,
+        failCount.isAcceptableOrUnknown(data['fail_count']!, _failCountMeta),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('uploaded_at')) {
+      context.handle(
+        _uploadedAtMeta,
+        uploadedAt.isAcceptableOrUnknown(data['uploaded_at']!, _uploadedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  UploadHistory map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return UploadHistory(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      type: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}type'],
+      )!,
+      sourcePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_path'],
+      )!,
+      filename: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}filename'],
+      )!,
+      fileCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}file_count'],
+      )!,
+      successCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}success_count'],
+      )!,
+      failCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}fail_count'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      uploadedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}uploaded_at'],
+      )!,
+    );
+  }
+
+  @override
+  $UploadHistoriesTable createAlias(String alias) {
+    return $UploadHistoriesTable(attachedDatabase, alias);
+  }
+}
+
+class UploadHistory extends DataClass implements Insertable<UploadHistory> {
+  final String id;
+  final String type;
+  final String sourcePath;
+  final String filename;
+  final int fileCount;
+  final int successCount;
+  final int failCount;
+  final String status;
+  final DateTime uploadedAt;
+  const UploadHistory({
+    required this.id,
+    required this.type,
+    required this.sourcePath,
+    required this.filename,
+    required this.fileCount,
+    required this.successCount,
+    required this.failCount,
+    required this.status,
+    required this.uploadedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['type'] = Variable<String>(type);
+    map['source_path'] = Variable<String>(sourcePath);
+    map['filename'] = Variable<String>(filename);
+    map['file_count'] = Variable<int>(fileCount);
+    map['success_count'] = Variable<int>(successCount);
+    map['fail_count'] = Variable<int>(failCount);
+    map['status'] = Variable<String>(status);
+    map['uploaded_at'] = Variable<DateTime>(uploadedAt);
+    return map;
+  }
+
+  UploadHistoriesCompanion toCompanion(bool nullToAbsent) {
+    return UploadHistoriesCompanion(
+      id: Value(id),
+      type: Value(type),
+      sourcePath: Value(sourcePath),
+      filename: Value(filename),
+      fileCount: Value(fileCount),
+      successCount: Value(successCount),
+      failCount: Value(failCount),
+      status: Value(status),
+      uploadedAt: Value(uploadedAt),
+    );
+  }
+
+  factory UploadHistory.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return UploadHistory(
+      id: serializer.fromJson<String>(json['id']),
+      type: serializer.fromJson<String>(json['type']),
+      sourcePath: serializer.fromJson<String>(json['sourcePath']),
+      filename: serializer.fromJson<String>(json['filename']),
+      fileCount: serializer.fromJson<int>(json['fileCount']),
+      successCount: serializer.fromJson<int>(json['successCount']),
+      failCount: serializer.fromJson<int>(json['failCount']),
+      status: serializer.fromJson<String>(json['status']),
+      uploadedAt: serializer.fromJson<DateTime>(json['uploadedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'type': serializer.toJson<String>(type),
+      'sourcePath': serializer.toJson<String>(sourcePath),
+      'filename': serializer.toJson<String>(filename),
+      'fileCount': serializer.toJson<int>(fileCount),
+      'successCount': serializer.toJson<int>(successCount),
+      'failCount': serializer.toJson<int>(failCount),
+      'status': serializer.toJson<String>(status),
+      'uploadedAt': serializer.toJson<DateTime>(uploadedAt),
+    };
+  }
+
+  UploadHistory copyWith({
+    String? id,
+    String? type,
+    String? sourcePath,
+    String? filename,
+    int? fileCount,
+    int? successCount,
+    int? failCount,
+    String? status,
+    DateTime? uploadedAt,
+  }) => UploadHistory(
+    id: id ?? this.id,
+    type: type ?? this.type,
+    sourcePath: sourcePath ?? this.sourcePath,
+    filename: filename ?? this.filename,
+    fileCount: fileCount ?? this.fileCount,
+    successCount: successCount ?? this.successCount,
+    failCount: failCount ?? this.failCount,
+    status: status ?? this.status,
+    uploadedAt: uploadedAt ?? this.uploadedAt,
+  );
+  UploadHistory copyWithCompanion(UploadHistoriesCompanion data) {
+    return UploadHistory(
+      id: data.id.present ? data.id.value : this.id,
+      type: data.type.present ? data.type.value : this.type,
+      sourcePath: data.sourcePath.present
+          ? data.sourcePath.value
+          : this.sourcePath,
+      filename: data.filename.present ? data.filename.value : this.filename,
+      fileCount: data.fileCount.present ? data.fileCount.value : this.fileCount,
+      successCount: data.successCount.present
+          ? data.successCount.value
+          : this.successCount,
+      failCount: data.failCount.present ? data.failCount.value : this.failCount,
+      status: data.status.present ? data.status.value : this.status,
+      uploadedAt: data.uploadedAt.present
+          ? data.uploadedAt.value
+          : this.uploadedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UploadHistory(')
+          ..write('id: $id, ')
+          ..write('type: $type, ')
+          ..write('sourcePath: $sourcePath, ')
+          ..write('filename: $filename, ')
+          ..write('fileCount: $fileCount, ')
+          ..write('successCount: $successCount, ')
+          ..write('failCount: $failCount, ')
+          ..write('status: $status, ')
+          ..write('uploadedAt: $uploadedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    type,
+    sourcePath,
+    filename,
+    fileCount,
+    successCount,
+    failCount,
+    status,
+    uploadedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is UploadHistory &&
+          other.id == this.id &&
+          other.type == this.type &&
+          other.sourcePath == this.sourcePath &&
+          other.filename == this.filename &&
+          other.fileCount == this.fileCount &&
+          other.successCount == this.successCount &&
+          other.failCount == this.failCount &&
+          other.status == this.status &&
+          other.uploadedAt == this.uploadedAt);
+}
+
+class UploadHistoriesCompanion extends UpdateCompanion<UploadHistory> {
+  final Value<String> id;
+  final Value<String> type;
+  final Value<String> sourcePath;
+  final Value<String> filename;
+  final Value<int> fileCount;
+  final Value<int> successCount;
+  final Value<int> failCount;
+  final Value<String> status;
+  final Value<DateTime> uploadedAt;
+  final Value<int> rowid;
+  const UploadHistoriesCompanion({
+    this.id = const Value.absent(),
+    this.type = const Value.absent(),
+    this.sourcePath = const Value.absent(),
+    this.filename = const Value.absent(),
+    this.fileCount = const Value.absent(),
+    this.successCount = const Value.absent(),
+    this.failCount = const Value.absent(),
+    this.status = const Value.absent(),
+    this.uploadedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  UploadHistoriesCompanion.insert({
+    required String id,
+    required String type,
+    required String sourcePath,
+    required String filename,
+    this.fileCount = const Value.absent(),
+    this.successCount = const Value.absent(),
+    this.failCount = const Value.absent(),
+    required String status,
+    this.uploadedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       type = Value(type),
+       sourcePath = Value(sourcePath),
+       filename = Value(filename),
+       status = Value(status);
+  static Insertable<UploadHistory> custom({
+    Expression<String>? id,
+    Expression<String>? type,
+    Expression<String>? sourcePath,
+    Expression<String>? filename,
+    Expression<int>? fileCount,
+    Expression<int>? successCount,
+    Expression<int>? failCount,
+    Expression<String>? status,
+    Expression<DateTime>? uploadedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (type != null) 'type': type,
+      if (sourcePath != null) 'source_path': sourcePath,
+      if (filename != null) 'filename': filename,
+      if (fileCount != null) 'file_count': fileCount,
+      if (successCount != null) 'success_count': successCount,
+      if (failCount != null) 'fail_count': failCount,
+      if (status != null) 'status': status,
+      if (uploadedAt != null) 'uploaded_at': uploadedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  UploadHistoriesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? type,
+    Value<String>? sourcePath,
+    Value<String>? filename,
+    Value<int>? fileCount,
+    Value<int>? successCount,
+    Value<int>? failCount,
+    Value<String>? status,
+    Value<DateTime>? uploadedAt,
+    Value<int>? rowid,
+  }) {
+    return UploadHistoriesCompanion(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      sourcePath: sourcePath ?? this.sourcePath,
+      filename: filename ?? this.filename,
+      fileCount: fileCount ?? this.fileCount,
+      successCount: successCount ?? this.successCount,
+      failCount: failCount ?? this.failCount,
+      status: status ?? this.status,
+      uploadedAt: uploadedAt ?? this.uploadedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (type.present) {
+      map['type'] = Variable<String>(type.value);
+    }
+    if (sourcePath.present) {
+      map['source_path'] = Variable<String>(sourcePath.value);
+    }
+    if (filename.present) {
+      map['filename'] = Variable<String>(filename.value);
+    }
+    if (fileCount.present) {
+      map['file_count'] = Variable<int>(fileCount.value);
+    }
+    if (successCount.present) {
+      map['success_count'] = Variable<int>(successCount.value);
+    }
+    if (failCount.present) {
+      map['fail_count'] = Variable<int>(failCount.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (uploadedAt.present) {
+      map['uploaded_at'] = Variable<DateTime>(uploadedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UploadHistoriesCompanion(')
+          ..write('id: $id, ')
+          ..write('type: $type, ')
+          ..write('sourcePath: $sourcePath, ')
+          ..write('filename: $filename, ')
+          ..write('fileCount: $fileCount, ')
+          ..write('successCount: $successCount, ')
+          ..write('failCount: $failCount, ')
+          ..write('status: $status, ')
+          ..write('uploadedAt: $uploadedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3359,6 +3916,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ImageTagsTable imageTags = $ImageTagsTable(this);
   late final $ImageRatingsTable imageRatings = $ImageRatingsTable(this);
   late final $SettingsTable settings = $SettingsTable(this);
+  late final $UploadHistoriesTable uploadHistories = $UploadHistoriesTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3371,6 +3931,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     imageTags,
     imageRatings,
     settings,
+    uploadHistories,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -6233,6 +6794,290 @@ typedef $$SettingsTableProcessedTableManager =
       Setting,
       PrefetchHooks Function()
     >;
+typedef $$UploadHistoriesTableCreateCompanionBuilder =
+    UploadHistoriesCompanion Function({
+      required String id,
+      required String type,
+      required String sourcePath,
+      required String filename,
+      Value<int> fileCount,
+      Value<int> successCount,
+      Value<int> failCount,
+      required String status,
+      Value<DateTime> uploadedAt,
+      Value<int> rowid,
+    });
+typedef $$UploadHistoriesTableUpdateCompanionBuilder =
+    UploadHistoriesCompanion Function({
+      Value<String> id,
+      Value<String> type,
+      Value<String> sourcePath,
+      Value<String> filename,
+      Value<int> fileCount,
+      Value<int> successCount,
+      Value<int> failCount,
+      Value<String> status,
+      Value<DateTime> uploadedAt,
+      Value<int> rowid,
+    });
+
+class $$UploadHistoriesTableFilterComposer
+    extends Composer<_$AppDatabase, $UploadHistoriesTable> {
+  $$UploadHistoriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourcePath => $composableBuilder(
+    column: $table.sourcePath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get filename => $composableBuilder(
+    column: $table.filename,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get fileCount => $composableBuilder(
+    column: $table.fileCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get successCount => $composableBuilder(
+    column: $table.successCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get failCount => $composableBuilder(
+    column: $table.failCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get uploadedAt => $composableBuilder(
+    column: $table.uploadedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$UploadHistoriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $UploadHistoriesTable> {
+  $$UploadHistoriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourcePath => $composableBuilder(
+    column: $table.sourcePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get filename => $composableBuilder(
+    column: $table.filename,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get fileCount => $composableBuilder(
+    column: $table.fileCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get successCount => $composableBuilder(
+    column: $table.successCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get failCount => $composableBuilder(
+    column: $table.failCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get uploadedAt => $composableBuilder(
+    column: $table.uploadedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$UploadHistoriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $UploadHistoriesTable> {
+  $$UploadHistoriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
+
+  GeneratedColumn<String> get sourcePath => $composableBuilder(
+    column: $table.sourcePath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get filename =>
+      $composableBuilder(column: $table.filename, builder: (column) => column);
+
+  GeneratedColumn<int> get fileCount =>
+      $composableBuilder(column: $table.fileCount, builder: (column) => column);
+
+  GeneratedColumn<int> get successCount => $composableBuilder(
+    column: $table.successCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get failCount =>
+      $composableBuilder(column: $table.failCount, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get uploadedAt => $composableBuilder(
+    column: $table.uploadedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$UploadHistoriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $UploadHistoriesTable,
+          UploadHistory,
+          $$UploadHistoriesTableFilterComposer,
+          $$UploadHistoriesTableOrderingComposer,
+          $$UploadHistoriesTableAnnotationComposer,
+          $$UploadHistoriesTableCreateCompanionBuilder,
+          $$UploadHistoriesTableUpdateCompanionBuilder,
+          (
+            UploadHistory,
+            BaseReferences<_$AppDatabase, $UploadHistoriesTable, UploadHistory>,
+          ),
+          UploadHistory,
+          PrefetchHooks Function()
+        > {
+  $$UploadHistoriesTableTableManager(
+    _$AppDatabase db,
+    $UploadHistoriesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$UploadHistoriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$UploadHistoriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$UploadHistoriesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> type = const Value.absent(),
+                Value<String> sourcePath = const Value.absent(),
+                Value<String> filename = const Value.absent(),
+                Value<int> fileCount = const Value.absent(),
+                Value<int> successCount = const Value.absent(),
+                Value<int> failCount = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime> uploadedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => UploadHistoriesCompanion(
+                id: id,
+                type: type,
+                sourcePath: sourcePath,
+                filename: filename,
+                fileCount: fileCount,
+                successCount: successCount,
+                failCount: failCount,
+                status: status,
+                uploadedAt: uploadedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String type,
+                required String sourcePath,
+                required String filename,
+                Value<int> fileCount = const Value.absent(),
+                Value<int> successCount = const Value.absent(),
+                Value<int> failCount = const Value.absent(),
+                required String status,
+                Value<DateTime> uploadedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => UploadHistoriesCompanion.insert(
+                id: id,
+                type: type,
+                sourcePath: sourcePath,
+                filename: filename,
+                fileCount: fileCount,
+                successCount: successCount,
+                failCount: failCount,
+                status: status,
+                uploadedAt: uploadedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$UploadHistoriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $UploadHistoriesTable,
+      UploadHistory,
+      $$UploadHistoriesTableFilterComposer,
+      $$UploadHistoriesTableOrderingComposer,
+      $$UploadHistoriesTableAnnotationComposer,
+      $$UploadHistoriesTableCreateCompanionBuilder,
+      $$UploadHistoriesTableUpdateCompanionBuilder,
+      (
+        UploadHistory,
+        BaseReferences<_$AppDatabase, $UploadHistoriesTable, UploadHistory>,
+      ),
+      UploadHistory,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6250,4 +7095,6 @@ class $AppDatabaseManager {
       $$ImageRatingsTableTableManager(_db, _db.imageRatings);
   $$SettingsTableTableManager get settings =>
       $$SettingsTableTableManager(_db, _db.settings);
+  $$UploadHistoriesTableTableManager get uploadHistories =>
+      $$UploadHistoriesTableTableManager(_db, _db.uploadHistories);
 }
