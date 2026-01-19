@@ -9,3 +9,5 @@ export 'tag_provider.dart';
 export 'app_provider.dart';
 export 'upload_provider.dart';
 export 'explorer_provider.dart';
+export 'danbooru_provider.dart';
+export 'nsfw_provider.dart';

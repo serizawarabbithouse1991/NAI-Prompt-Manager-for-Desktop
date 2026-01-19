@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/models.dart';
 import '../services/image_import_service.dart';
 import 'repository_providers.dart';
+import 'nsfw_provider.dart';
+import 'app_provider.dart';
 
 /// アップロード進捗項目
 class UploadItem {
@@ -217,7 +219,15 @@ class UploadNotifier extends StateNotifier<UploadState> {
 final uploadProvider = StateNotifierProvider<UploadNotifier, UploadState>((ref) {
   final imageRepository = ref.watch(imageRepositoryProvider);
   final tagRepository = ref.watch(tagRepositoryProvider);
-  final importService = ImageImportService(imageRepository, tagRepository);
+  final nsfwState = ref.watch(nsfwServiceProvider);
+  final appSettings = ref.watch(appSettingsProvider).settings;
+  
+  final importService = ImageImportService(
+    imageRepository,
+    tagRepository,
+    nsfwState.service,
+    appSettings.nsfwDetectionEnabled,
+  );
   return UploadNotifier(importService);
 });
 

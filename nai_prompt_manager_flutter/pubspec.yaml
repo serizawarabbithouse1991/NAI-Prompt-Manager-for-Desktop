@@ -38,6 +38,9 @@ dependencies:
   fluent_ui: ^4.11.2
   window_manager: ^0.4.3
 
+  # HTTP Client
+  http: ^1.2.2
+
   # Utilities
   uuid: ^4.5.1
   intl: ^0.20.2

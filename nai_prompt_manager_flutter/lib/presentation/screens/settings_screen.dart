@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
+import '../../providers/providers.dart';
 import '../../services/services.dart';
 import '../themes/nai_theme.dart';
 
@@ -149,6 +150,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           icon: FluentIcons.tag,
           children: [
             _buildDanbooruCard(),
+          ],
+        ),
+        const SizedBox(height: 24),
+        _buildSection(
+          title: 'NSFW表示設定',
+          icon: FluentIcons.shield,
+          children: [
+            _buildNsfwSettingsCard(),
+          ],
+        ),
+        const SizedBox(height: 24),
+        _buildSection(
+          title: 'NSFW自動判定',
+          icon: FluentIcons.processing,
+          children: [
+            _buildNsfwDetectionCard(),
           ],
         ),
         const SizedBox(height: 24),
@@ -467,6 +484,394 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNsfwSettingsCard() {
+    final appSettings = ref.watch(appSettingsProvider).settings;
+
+    return Card(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'NSFW画像の表示制御',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: NaiTheme.text0,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'NSFW（Not Safe For Work）としてマークされた画像の表示方法を設定します。',
+            style: TextStyle(
+              fontSize: 13,
+              color: NaiTheme.text2,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // NSFW画像を表示するかどうか
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'NSFW画像を表示',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: NaiTheme.text0,
+                      ),
+                    ),
+                    Text(
+                      'オフにするとNSFW画像がギャラリーに表示されなくなります',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: NaiTheme.text2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ToggleSwitch(
+                checked: appSettings.showNSFW,
+                onChanged: (value) {
+                  ref.read(appSettingsProvider.notifier).setNsfwSettings(
+                    showNSFW: value,
+                  );
+                  // 画像リストを再読み込み
+                  ref.read(imageListProvider.notifier).refreshImages();
+                },
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+          Divider(style: DividerThemeData(decoration: BoxDecoration(color: NaiTheme.bg2))),
+          const SizedBox(height: 16),
+
+          // NSFWサムネイルをぼかす
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'NSFWサムネイルをぼかす',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: NaiTheme.text0,
+                      ),
+                    ),
+                    Text(
+                      'NSFW画像のサムネイルにぼかし効果を適用します',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: NaiTheme.text2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ToggleSwitch(
+                checked: appSettings.blurNSFW,
+                onChanged: appSettings.showNSFW
+                    ? (value) {
+                        ref.read(appSettingsProvider.notifier).setNsfwSettings(
+                          blurNSFW: value,
+                        );
+                      }
+                    : null,
+              ),
+            ],
+          ),
+
+          if (!appSettings.showNSFW) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: NaiTheme.warning.withAlpha(20),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: NaiTheme.warning.withAlpha(50)),
+              ),
+              child: Row(
+                children: [
+                  Icon(FluentIcons.info, size: 14, color: NaiTheme.warning),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'NSFW画像が非表示のため、ぼかし設定は無効です',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: NaiTheme.warning,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNsfwDetectionCard() {
+    final nsfwState = ref.watch(nsfwServiceProvider);
+    final appSettings = ref.watch(appSettingsProvider).settings;
+
+    return Card(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'プロンプトベースNSFW判定',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: NaiTheme.text0,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '画像のプロンプトを分析してNSFWコンテンツを自動検出します。',
+            style: TextStyle(
+              fontSize: 13,
+              color: NaiTheme.text2,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // NSFW自動判定を有効化
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'NSFW自動判定を有効にする',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: NaiTheme.text0,
+                      ),
+                    ),
+                    Text(
+                      '新規インポート時にプロンプトからNSFWレベルを判定',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: NaiTheme.text2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ToggleSwitch(
+                checked: appSettings.nsfwDetectionEnabled,
+                onChanged: (value) {
+                  ref.read(appSettingsProvider.notifier).setNsfwSettings(
+                    nsfwDetectionEnabled: value,
+                  );
+                },
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+          Divider(style: DividerThemeData(decoration: BoxDecoration(color: NaiTheme.bg2))),
+          const SizedBox(height: 16),
+
+          // しきい値設定
+          Text(
+            'NSFWしきい値: ${(nsfwState.nsfwThreshold * 100).toInt()}%',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: NaiTheme.text0,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'このスコア以上でNSFWと判定されます',
+            style: TextStyle(
+              fontSize: 11,
+              color: NaiTheme.text2,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Slider(
+            value: nsfwState.nsfwThreshold * 100,
+            min: 10,
+            max: 90,
+            divisions: 8,
+            onChanged: appSettings.nsfwDetectionEnabled
+                ? (value) {
+                    ref.read(nsfwServiceProvider.notifier)
+                        .setNsfwThreshold(value / 100);
+                  }
+                : null,
+            label: '${(nsfwState.nsfwThreshold * 100).toInt()}%',
+          ),
+
+          const SizedBox(height: 16),
+          Divider(style: DividerThemeData(decoration: BoxDecoration(color: NaiTheme.bg2))),
+          const SizedBox(height: 16),
+
+          // Ollama設定
+          Text(
+            'ローカルLLM判定（Ollama）',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: NaiTheme.text0,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Ollama + llavaを使用して画像を直接分析します。プロンプトがない画像も判定可能です。',
+            style: TextStyle(
+              fontSize: 13,
+              color: NaiTheme.text2,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Ollama接続状態
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: NaiTheme.bg2,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  nsfwState.ollamaAvailable
+                      ? FluentIcons.check_mark
+                      : FluentIcons.status_circle_error_x,
+                  size: 14,
+                  color: nsfwState.ollamaAvailable
+                      ? NaiTheme.success
+                      : NaiTheme.text2,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    nsfwState.ollamaAvailable
+                        ? 'Ollamaに接続済み'
+                        : 'Ollamaが利用できません（起動していないか、接続できません）',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: nsfwState.ollamaAvailable
+                          ? NaiTheme.success
+                          : NaiTheme.text2,
+                    ),
+                  ),
+                ),
+                Button(
+                  onPressed: () {
+                    ref.read(nsfwServiceProvider.notifier).recheckOllama();
+                  },
+                  child: const Text('再確認'),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // Ollama URL設定
+          Row(
+            children: [
+              Expanded(
+                child: TextBox(
+                  placeholder: 'Ollama URL',
+                  controller: TextEditingController(text: nsfwState.ollamaUrl),
+                  onSubmitted: (value) {
+                    ref.read(nsfwServiceProvider.notifier).setOllamaUrl(value);
+                  },
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // Ollamaモデル選択
+          if (nsfwState.availableModels.isNotEmpty) ...[
+            Text(
+              '使用するモデル',
+              style: TextStyle(
+                fontSize: 12,
+                color: NaiTheme.text1,
+              ),
+            ),
+            const SizedBox(height: 4),
+            ComboBox<String>(
+              value: nsfwState.ollamaModel,
+              items: nsfwState.availableModels
+                  .map((model) => ComboBoxItem<String>(
+                        value: model,
+                        child: Text(model),
+                      ))
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  ref.read(nsfwServiceProvider.notifier).setOllamaModel(value);
+                }
+              },
+            ),
+          ],
+
+          const SizedBox(height: 12),
+
+          // Ollama使用設定
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Ollamaを判定に使用',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: NaiTheme.text0,
+                      ),
+                    ),
+                    Text(
+                      'プロンプト判定に加えて画像分析も実行（時間がかかります）',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: NaiTheme.text2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ToggleSwitch(
+                checked: nsfwState.useOllamaForDetection,
+                onChanged: nsfwState.ollamaAvailable
+                    ? (value) {
+                        ref.read(nsfwServiceProvider.notifier).setUseOllama(value);
+                      }
+                    : null,
+              ),
+            ],
+          ),
         ],
       ),
     );

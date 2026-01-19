@@ -10,14 +10,22 @@ import '../data/repositories/repositories.dart';
 import 'png_metadata_service.dart';
 import 'thumbnail_service.dart';
 import 'danbooru_service.dart';
+import 'nsfw_service.dart';
 
 /// 画像インポートサービス
 class ImageImportService {
   final ImageRepository _imageRepository;
   final TagRepository? _tagRepository;
+  final NsfwService? _nsfwService;
+  final bool _enableNsfwDetection;
   static const _uuid = Uuid();
 
-  ImageImportService(this._imageRepository, [this._tagRepository]);
+  ImageImportService(
+    this._imageRepository, [
+    this._tagRepository,
+    this._nsfwService,
+    this._enableNsfwDetection = false,
+  ]);
 
   /// 画像ファイルをインポート
   Future<ImportResult> importImage({
@@ -78,6 +86,13 @@ class ImageImportService {
       // サムネイルを生成
       final thumbnailPath = await ThumbnailService.generateThumbnailFromBytes(bytes);
 
+      // NSFW判定を実行
+      NsfwResult? nsfwResult;
+      if (_enableNsfwDetection && _nsfwService != null) {
+        // プロンプトベースの判定
+        nsfwResult = _nsfwService.detectFromPrompt(promptData?.positivePrompt);
+      }
+
       // 画像モデルを作成
       final imageModel = ImageModel(
         id: id,
@@ -90,6 +105,9 @@ class ImageImportService {
         fileSize: bytes.length,
         fileHash: fileHash,
         createdAt: DateTime.now(),
+        isNsfw: nsfwResult?.isNsfw,
+        nsfwScore: nsfwResult?.score,
+        nsfwCategory: nsfwResult?.category,
       );
 
       // プロンプトモデルを作成
