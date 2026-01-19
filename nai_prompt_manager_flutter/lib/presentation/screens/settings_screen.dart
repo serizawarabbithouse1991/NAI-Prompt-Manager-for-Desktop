@@ -27,6 +27,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _loadingDanbooru = false;
   String? _danbooruStatus;
 
+  // 自動タグ付け設定
+  bool _autoTagEnabled = true;
+
   @override
   void initState() {
     super.initState();
@@ -34,7 +37,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // Providerを使うため、フレーム後に実行
     SchedulerBinding.instance.addPostFrameCallback((_) {
       _initDanbooruFromProvider();
+      _loadAutoTagSetting();
     });
+  }
+
+  /// 自動タグ付け設定を読み込む
+  Future<void> _loadAutoTagSetting() async {
+    final repository = ref.read(settingsRepositoryProvider);
+    final enabled = await repository.getAutoTagEnabled();
+    if (mounted) {
+      setState(() => _autoTagEnabled = enabled);
+    }
+  }
+
+  /// 自動タグ付け設定を保存
+  Future<void> _saveAutoTagSetting(bool enabled) async {
+    setState(() => _autoTagEnabled = enabled);
+    final repository = ref.read(settingsRepositoryProvider);
+    await repository.setAutoTagEnabled(enabled);
   }
 
   Future<void> _checkTauriDb() async {
@@ -1428,10 +1448,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                 ),
                 ToggleSwitch(
-                  checked: true, // TODO: 設定から読み込む
-                  onChanged: (value) {
-                    // TODO: 設定を保存
-                  },
+                  checked: _autoTagEnabled,
+                  onChanged: (value) => _saveAutoTagSetting(value),
                 ),
               ],
             ),

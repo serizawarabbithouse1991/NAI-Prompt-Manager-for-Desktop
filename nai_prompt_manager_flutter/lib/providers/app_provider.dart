@@ -1,7 +1,19 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/models.dart';
 import '../data/repositories/settings_repository.dart';
 import 'database_provider.dart';
+
+// #region agent log
+void _debugLog(String location, String message, Map<String, dynamic> data, String hypothesisId) {
+  try {
+    final logFile = File(r'c:\Users\rt032\001-WEBDEV\NAI Prompt Manager\.cursor\debug.log');
+    final logEntry = jsonEncode({'location': location, 'message': message, 'data': data, 'hypothesisId': hypothesisId, 'timestamp': DateTime.now().millisecondsSinceEpoch, 'sessionId': 'debug-session'});
+    logFile.writeAsStringSync('$logEntry\n', mode: FileMode.append);
+  } catch (_) {}
+}
+// #endregion
 
 /// アプリケーション設定の状態
 class AppSettingsState {
@@ -47,6 +59,9 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
 
   /// 設定を読み込む
   Future<void> loadSettings() async {
+    // #region agent log
+    _debugLog('app_provider.dart:loadSettings:entry', 'Loading settings', {'initialized': state.initialized}, 'H2');
+    // #endregion
     if (state.initialized) return;
 
     state = state.copyWith(loading: true, error: null);
@@ -55,6 +70,9 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
       // DBから設定を読み込む
       final appSettings = await _repository.loadAppSettings();
       final viewOptions = await _repository.loadViewOptions();
+      // #region agent log
+      _debugLog('app_provider.dart:loadSettings:success', 'Settings loaded successfully', {'theme': appSettings.theme.value, 'language': appSettings.language}, 'H2');
+      // #endregion
 
       state = state.copyWith(
         settings: appSettings,
@@ -63,6 +81,9 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
         loading: false,
       );
     } catch (e) {
+      // #region agent log
+      _debugLog('app_provider.dart:loadSettings:error', 'Error loading settings', {'error': e.toString()}, 'H2');
+      // #endregion
       // エラー時はデフォルト設定を使用
       state = state.copyWith(
         settings: const AppSettings(),

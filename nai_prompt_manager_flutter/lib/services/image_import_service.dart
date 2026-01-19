@@ -32,6 +32,7 @@ class ImageImportService {
     required String sourcePath,
     String? folderId,
     bool checkDuplicates = true,
+    bool enableAutoTag = true,
   }) async {
     final sourceFile = File(sourcePath);
     if (!await sourceFile.exists()) {
@@ -138,7 +139,7 @@ class ImageImportService {
 
       // Danbooru自動タグ付け
       List<String> autoTags = [];
-      if (_tagRepository != null) {
+      if (_tagRepository != null && enableAutoTag) {
         autoTags = await _applyDanbooruTags(id, fileHash);
       }
 
@@ -153,6 +154,7 @@ class ImageImportService {
     required List<String> sourcePaths,
     String? folderId,
     bool checkDuplicates = true,
+    bool enableAutoTag = true,
   }) async* {
     final total = sourcePaths.length;
     var processed = 0;
@@ -165,6 +167,7 @@ class ImageImportService {
         sourcePath: path,
         folderId: folderId,
         checkDuplicates: checkDuplicates,
+        enableAutoTag: enableAutoTag,
       );
 
       processed++;

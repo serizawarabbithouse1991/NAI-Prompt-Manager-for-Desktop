@@ -99,8 +99,9 @@ class UploadState {
 /// アップロードのNotifier
 class UploadNotifier extends StateNotifier<UploadState> {
   final ImageImportService _importService;
+  final SettingsRepository _settingsRepository;
 
-  UploadNotifier(this._importService) : super(const UploadState());
+  UploadNotifier(this._importService, this._settingsRepository) : super(const UploadState());
 
   /// ファイルを追加
   void addFiles(List<File> files) {
@@ -120,10 +121,12 @@ class UploadNotifier extends StateNotifier<UploadState> {
     required String filePath,
     String? folderId,
   }) async {
+    final enableAutoTag = await _settingsRepository.getAutoTagEnabled();
     final result = await _importService.importImage(
       sourcePath: filePath,
       folderId: folderId,
       checkDuplicates: true,
+      enableAutoTag: enableAutoTag,
     );
 
     if (result.status == ImportStatus.error) {
@@ -136,6 +139,9 @@ class UploadNotifier extends StateNotifier<UploadState> {
     if (state.isUploading) return;
 
     state = state.copyWith(isUploading: true);
+    
+    // 自動タグ付け設定を取得
+    final enableAutoTag = await _settingsRepository.getAutoTagEnabled();
 
     for (var i = 0; i < state.items.length; i++) {
       final item = state.items[i];
@@ -149,6 +155,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
           sourcePath: item.filePath,
           folderId: folderId,
           checkDuplicates: true,
+          enableAutoTag: enableAutoTag,
         );
 
         if (result.status == ImportStatus.success) {
@@ -225,6 +232,7 @@ final uploadProvider = StateNotifierProvider<UploadNotifier, UploadState>((ref) 
   final tagRepository = ref.watch(tagRepositoryProvider);
   final nsfwState = ref.watch(nsfwServiceProvider);
   final appSettings = ref.watch(appSettingsProvider).settings;
+  final settingsRepository = ref.watch(settingsRepositoryProvider);
   
   final importService = ImageImportService(
     imageRepository,
@@ -232,7 +240,7 @@ final uploadProvider = StateNotifierProvider<UploadNotifier, UploadState>((ref) 
     nsfwState.service,
     appSettings.nsfwDetectionEnabled,
   );
-  return UploadNotifier(importService);
+  return UploadNotifier(importService, settingsRepository);
 });
 
 /// アップロードモーダル表示状態
@@ -246,11 +254,13 @@ final uploadModalVisibleProvider = StateProvider<bool>((ref) => false);
 final backgroundUploadServiceProvider = Provider<BackgroundUploadService>((ref) {
   final service = BackgroundUploadService();
   final imageRepository = ref.watch(imageRepositoryProvider);
+  final tagRepository = ref.watch(tagRepositoryProvider);
   final nsfwState = ref.watch(nsfwServiceProvider);
   final appSettings = ref.watch(appSettingsProvider).settings;
   
   service.initialize(
     imageRepository: imageRepository,
+    tagRepository: tagRepository,
     nsfwService: nsfwState.service,
     enableNsfwDetection: appSettings.nsfwDetectionEnabled,
   );
@@ -274,11 +284,15 @@ final currentUploadProgressProvider = Provider<BackgroundUploadProgress>((ref) {
 class BackgroundUploadNotifier extends StateNotifier<BackgroundUploadProgress> {
   final BackgroundUploadService _service;
   final ImageRepository _imageRepository;
+  final SettingsRepository _settingsRepository;
   StreamSubscription<BackgroundUploadProgress>? _subscription;
   static const _uuid = Uuid();
 
-  BackgroundUploadNotifier(this._service, this._imageRepository) 
-      : super(const BackgroundUploadProgress()) {
+  BackgroundUploadNotifier(
+    this._service, 
+    this._imageRepository,
+    this._settingsRepository,
+  ) : super(const BackgroundUploadProgress()) {
     _subscription = _service.progressStream.listen((progress) {
       state = progress;
     });
@@ -291,6 +305,9 @@ class BackgroundUploadNotifier extends StateNotifier<BackgroundUploadProgress> {
   }) async {
     // 既存ハッシュを取得（O(1)重複チェック用）
     final existingHashes = await _imageRepository.getAllFileHashes();
+    
+    // 自動タグ付け設定を取得
+    final enableAutoTag = await _settingsRepository.getAutoTagEnabled();
     
     // タスクを作成
     final tasks = filePaths.map((path) {
@@ -307,6 +324,7 @@ class BackgroundUploadNotifier extends StateNotifier<BackgroundUploadProgress> {
     await _service.startUpload(
       tasks: tasks,
       existingHashes: existingHashes,
+      enableAutoTag: enableAutoTag,
     );
   }
 
@@ -332,5 +350,6 @@ final backgroundUploadNotifierProvider =
     StateNotifierProvider<BackgroundUploadNotifier, BackgroundUploadProgress>((ref) {
   final service = ref.watch(backgroundUploadServiceProvider);
   final imageRepository = ref.watch(imageRepositoryProvider);
-  return BackgroundUploadNotifier(service, imageRepository);
+  final settingsRepository = ref.watch(settingsRepositoryProvider);
+  return BackgroundUploadNotifier(service, imageRepository, settingsRepository);
 });

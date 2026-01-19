@@ -13,6 +13,7 @@ import '../data/models/models.dart';
 import '../data/repositories/repositories.dart';
 import 'png_metadata_service.dart';
 import 'nsfw_service.dart';
+import 'danbooru_service.dart';
 
 /// 並列処理の同時実行数
 const int _maxConcurrency = 8;
@@ -214,6 +215,7 @@ class BackgroundUploadService {
   bool _isCancelled = false;
 
   ImageRepository? _imageRepository;
+  TagRepository? _tagRepository;
   NsfwService? _nsfwService;
   bool _enableNsfwDetection = false;
 
@@ -222,10 +224,12 @@ class BackgroundUploadService {
   /// サービスを初期化
   void initialize({
     required ImageRepository imageRepository,
+    TagRepository? tagRepository,
     NsfwService? nsfwService,
     bool enableNsfwDetection = false,
   }) {
     _imageRepository = imageRepository;
+    _tagRepository = tagRepository;
     _nsfwService = nsfwService;
     _enableNsfwDetection = enableNsfwDetection;
   }
@@ -234,6 +238,7 @@ class BackgroundUploadService {
   Future<void> startUpload({
     required List<UploadTask> tasks,
     Set<String>? existingHashes,
+    bool enableAutoTag = false,
   }) async {
     if (_isRunning) {
       debugPrint('BackgroundUploadService: Already running');
@@ -375,6 +380,11 @@ class BackgroundUploadService {
           // DBに保存
           await _imageRepository!.insertImage(imageModel, prompt);
 
+          // Danbooru自動タグ付け
+          if (enableAutoTag && _tagRepository != null) {
+            await _applyDanbooruTags(task.id, processedData.bytes);
+          }
+
           _currentProgress = _currentProgress.copyWith(
             completed: _currentProgress.completed + 1,
           );
@@ -424,6 +434,56 @@ class BackgroundUploadService {
   /// リソースを解放
   void dispose() {
     _progressController.close();
+  }
+
+  /// MD5ハッシュを計算
+  String _calculateMd5(Uint8List bytes) {
+    return md5.convert(bytes).toString();
+  }
+
+  /// Danbooruタグを自動付与
+  Future<List<String>> _applyDanbooruTags(String imageId, Uint8List bytes) async {
+    final service = DanbooruService();
+    if (!service.isConfigured || _tagRepository == null) {
+      return [];
+    }
+
+    try {
+      // MD5ハッシュを計算
+      final md5Hash = _calculateMd5(bytes);
+
+      // Danbooruからタグを取得
+      final danbooruTags = await service.getTagsByMd5(md5Hash);
+      if (danbooruTags.isEmpty) return [];
+
+      // 人気タグを上位50件に制限
+      final topTags = service.getTopTags(danbooruTags, limit: 50);
+      final appliedTags = <String>[];
+
+      for (final dTag in topTags) {
+        // タグが存在するか確認、なければ作成
+        var tag = await _tagRepository!.findTagByName(dTag.name);
+        if (tag == null) {
+          final newTag = Tag(
+            id: _uuid.v4(),
+            name: dTag.name,
+            createdAt: DateTime.now(),
+          );
+          await _tagRepository!.insertTag(newTag);
+          tag = newTag;
+        }
+
+        // 画像にタグを関連付け
+        await _tagRepository!.addTagToImage(imageId, tag.id);
+        appliedTags.add(tag.name);
+      }
+
+      return appliedTags;
+    } catch (e) {
+      debugPrint('BackgroundUploadService: Auto-tagging error: $e');
+      // エラーは無視して空リストを返す
+      return [];
+    }
   }
 }
 
