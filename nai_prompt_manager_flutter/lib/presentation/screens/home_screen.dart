@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../themes/nai_theme.dart';
+import 'dashboard_screen.dart';
 import 'gallery_screen.dart';
+import 'prompt_analysis_screen.dart';
 import 'settings_screen.dart';
 import 'upload_dialog.dart';
 import 'search_screen.dart';
@@ -23,7 +25,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WindowListener {
     PaneItem(
       icon: const Icon(FluentIcons.home),
       title: const Text('ホーム'),
-      body: const _PlaceholderPage(title: 'ホーム'),
+      body: const DashboardScreen(),
     ),
     PaneItem(
       icon: const Icon(FluentIcons.photo2),
@@ -36,9 +38,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WindowListener {
       body: const SearchScreen(),
     ),
     PaneItem(
-      icon: const Icon(FluentIcons.edit),
+      icon: const Icon(FluentIcons.chart),
       title: const Text('プロンプト分析'),
-      body: const _PlaceholderPage(title: 'プロンプト分析'),
+      body: const PromptAnalysisScreen(),
     ),
     PaneItemSeparator(),
     PaneItem(

@@ -28,6 +28,9 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
   double _progress = 0;
   String? _currentFile;
   bool _dragActive = false;
+  String? _errorMessage;
+  int _successCount = 0;
+  int _failCount = 0;
 
   Future<void> _selectFiles() async {
     try {
@@ -75,6 +78,9 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
     setState(() {
       _uploading = true;
       _progress = 0;
+      _errorMessage = null;
+      _successCount = 0;
+      _failCount = 0;
     });
 
     try {
@@ -93,8 +99,13 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
             filePath: file.path,
             folderId: folderId,
           );
+          setState(() => _successCount++);
         } catch (e) {
           debugPrint('Failed to upload ${file.name}: $e');
+          setState(() {
+            _failCount++;
+            _errorMessage = 'エラー: $e';
+          });
         }
 
         setState(() {
@@ -106,10 +117,22 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
       await ref.read(imageListProvider.notifier).refreshImages();
 
       if (mounted) {
-        Navigator.pop(context);
+        // 成功した場合はダイアログを閉じる
+        if (_failCount == 0) {
+          Navigator.pop(context);
+        } else {
+          // 一部失敗した場合は結果を表示
+          setState(() {
+            _uploading = false;
+            _errorMessage = '$_successCount件成功、$_failCount件失敗';
+          });
+        }
       }
     } catch (e) {
       debugPrint('Upload failed: $e');
+      setState(() {
+        _errorMessage = 'アップロードに失敗しました: $e';
+      });
     } finally {
       setState(() {
         _uploading = false;
@@ -151,6 +174,12 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
           // プログレスバー
           if (_uploading) ...[
             _buildProgress(),
+            const SizedBox(height: 16),
+          ],
+
+          // エラーメッセージ
+          if (_errorMessage != null) ...[
+            _buildErrorMessage(),
             const SizedBox(height: 16),
           ],
         ],
@@ -365,6 +394,41 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
   String _formatTotalSize() {
     final total = _files.fold<int>(0, (sum, f) => sum + f.size);
     return '合計: ${_formatFileSize(total)}';
+  }
+
+  Widget _buildErrorMessage() {
+    final isError = _errorMessage?.startsWith('エラー') ?? false;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isError 
+            ? NaiTheme.error.withAlpha(20) 
+            : NaiTheme.warning.withAlpha(20),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: isError ? NaiTheme.error : NaiTheme.warning,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isError ? FluentIcons.error : FluentIcons.warning,
+            size: 16,
+            color: isError ? NaiTheme.error : NaiTheme.warning,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _errorMessage!,
+              style: TextStyle(
+                fontSize: 12,
+                color: isError ? NaiTheme.error : NaiTheme.warning,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

@@ -5,16 +5,23 @@ import 'package:path_provider/path_provider.dart';
 /// Tauri版アプリからのDBマイグレーションサービス
 class DatabaseMigrationService {
   /// Tauri版アプリのDBパスを取得
-  /// Windows: C:\Users\{user}\AppData\Roaming\com.promptvault.app\
-  /// macOS: ~/Library/Application Support/com.promptvault.app/
-  /// Linux: ~/.local/share/com.promptvault.app/
+  /// Windows: C:\Users\{user}\AppData\Roaming\com.nai-prompt-manager.desktop\
+  /// macOS: ~/Library/Application Support/com.nai-prompt-manager.desktop/
+  /// Linux: ~/.local/share/com.nai-prompt-manager.desktop/
   static Future<String?> findTauriDbPath() async {
     final possiblePaths = await _getPossibleTauriPaths();
+    final possibleDbNames = [
+      'nai_prompt_manager.db',
+      'prompt-manager.db',
+      'nai-prompt-manager.db',
+    ];
     
     for (final basePath in possiblePaths) {
-      final dbPath = p.join(basePath, 'prompt-manager.db');
-      if (File(dbPath).existsSync()) {
-        return dbPath;
+      for (final dbName in possibleDbNames) {
+        final dbPath = p.join(basePath, dbName);
+        if (File(dbPath).existsSync()) {
+          return dbPath;
+        }
       }
     }
     
@@ -27,18 +34,24 @@ class DatabaseMigrationService {
     if (Platform.isWindows) {
       final appData = Platform.environment['APPDATA'];
       if (appData != null) {
+        // Tauri v2のデフォルトパス (identifier)
+        paths.add(p.join(appData, 'com.nai-prompt-manager.desktop'));
+        // 旧バージョン互換
         paths.add(p.join(appData, 'com.promptvault.app'));
         paths.add(p.join(appData, 'nai-prompt-manager'));
+        paths.add(p.join(appData, 'NAI Prompt Manager'));
       }
     } else if (Platform.isMacOS) {
       final home = Platform.environment['HOME'];
       if (home != null) {
+        paths.add(p.join(home, 'Library', 'Application Support', 'com.nai-prompt-manager.desktop'));
         paths.add(p.join(home, 'Library', 'Application Support', 'com.promptvault.app'));
         paths.add(p.join(home, 'Library', 'Application Support', 'nai-prompt-manager'));
       }
     } else if (Platform.isLinux) {
       final home = Platform.environment['HOME'];
       if (home != null) {
+        paths.add(p.join(home, '.local', 'share', 'com.nai-prompt-manager.desktop'));
         paths.add(p.join(home, '.local', 'share', 'com.promptvault.app'));
         paths.add(p.join(home, '.local', 'share', 'nai-prompt-manager'));
       }
