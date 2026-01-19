@@ -29,12 +29,8 @@ class UploadDialog extends ConsumerStatefulWidget {
 class _UploadDialogState extends ConsumerState<UploadDialog> {
   final List<PendingFile> _files = [];
   bool _uploading = false;
-  double _progress = 0;
-  String? _currentFile;
   bool _dragActive = false;
   String? _errorMessage;
-  int _successCount = 0;
-  int _failCount = 0;
   bool _extractingZip = false;
   String? _extractStatus;
 
@@ -142,22 +138,23 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
     });
   }
 
+  /// バックグラウンドアップロードを開始
   Future<void> _upload() async {
     if (_files.isEmpty) return;
 
     setState(() {
       _uploading = true;
-      _progress = 0;
       _errorMessage = null;
-      _successCount = 0;
-      _failCount = 0;
     });
 
     try {
-      final uploadNotifier = ref.read(uploadProvider.notifier);
+      final uploadNotifier = ref.read(backgroundUploadNotifierProvider.notifier);
       final explorerState = ref.read(explorerProvider);
       final folderId = explorerState.selectedFolderId;
       final historyRepo = ref.read(uploadHistoryRepositoryProvider);
+
+      // ファイルパスのリストを作成
+      final filePaths = _files.map((f) => f.path).toList();
 
       // ZIPソース別にグループ化して履歴を記録
       final zipGroups = <String, List<PendingFile>>{};
@@ -171,40 +168,11 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
         }
       }
 
-      for (var i = 0; i < _files.length; i++) {
-        final file = _files[i];
-        setState(() {
-          _currentFile = file.name;
-        });
-
-        try {
-          await uploadNotifier.uploadFile(
-            filePath: file.path,
-            folderId: folderId,
-          );
-          setState(() => _successCount++);
-        } catch (e) {
-          debugPrint('Failed to upload ${file.name}: $e');
-          setState(() {
-            _failCount++;
-            _errorMessage = 'エラー: $e';
-          });
-        }
-
-        setState(() {
-          _progress = (i + 1) / _files.length;
-        });
-      }
-
-      // アップロード履歴を保存
+      // アップロード履歴を保存（開始時点で）
       const uuid = Uuid();
       
       // 直接選択されたファイルの履歴
       if (directFiles.isNotEmpty) {
-        final directSuccess = directFiles.where((f) => 
-          _files.indexOf(f) < _successCount).length;
-        final directFail = directFiles.length - directSuccess;
-        
         await historyRepo.addHistory(
           id: uuid.v4(),
           type: 'image',
@@ -213,54 +181,42 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
               ? directFiles.first.name 
               : '${directFiles.length}ファイル',
           fileCount: directFiles.length,
-          successCount: directSuccess,
-          failCount: directFail,
-          status: directFail == 0 
-              ? 'completed' 
-              : (directSuccess == 0 ? 'failed' : 'partial'),
+          successCount: 0,
+          failCount: 0,
+          status: 'processing',
         );
       }
 
       // ZIPファイルの履歴
       for (final entry in zipGroups.entries) {
-        final zipFiles = entry.value;
-        // 単純化: ZIPからのファイルは全て成功とみなす（既に処理済み）
+        final zipFilesList = entry.value;
         await historyRepo.addHistory(
           id: uuid.v4(),
           type: 'zip',
           sourcePath: entry.key,
           filename: entry.key,
-          fileCount: zipFiles.length,
-          successCount: zipFiles.length,
+          fileCount: zipFilesList.length,
+          successCount: 0,
           failCount: 0,
-          status: 'completed',
+          status: 'processing',
         );
       }
 
-      // 画像リストをリロード
-      await ref.read(imageListProvider.notifier).refreshImages();
+      // バックグラウンドアップロードを開始
+      uploadNotifier.startUpload(
+        filePaths: filePaths,
+        folderId: folderId,
+      );
 
+      // ダイアログを閉じる（バックグラウンドで処理継続）
       if (mounted) {
-        // 成功した場合はダイアログを閉じる
-        if (_failCount == 0) {
-          Navigator.pop(context);
-        } else {
-          // 一部失敗した場合は結果を表示
-          setState(() {
-            _uploading = false;
-            _errorMessage = '$_successCount件成功、$_failCount件失敗';
-          });
-        }
+        Navigator.pop(context);
       }
     } catch (e) {
       debugPrint('Upload failed: $e');
       setState(() {
-        _errorMessage = 'アップロードに失敗しました: $e';
-      });
-    } finally {
-      setState(() {
         _uploading = false;
-        _currentFile = null;
+        _errorMessage = 'アップロードの開始に失敗しました: $e';
       });
     }
   }
@@ -325,10 +281,10 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
             child: const Text('クリア'),
           ),
         FilledButton(
-          onPressed: _files.isEmpty || _uploading ? null : _upload,
+          onPressed: _files.isEmpty || _uploading || _extractingZip ? null : _upload,
           child: Text(
             _uploading
-                ? 'アップロード中...'
+                ? 'アップロード開始中...'
                 : 'アップロード (${_files.length})',
           ),
         ),
@@ -521,34 +477,32 @@ class _UploadDialogState extends ConsumerState<UploadDialog> {
   }
 
   Widget _buildProgress() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                _currentFile != null ? '処理中: $_currentFile' : 'アップロード中...',
-                style: TextStyle(
-                  color: NaiTheme.text1,
-                  fontSize: 12,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Text(
-              '${(_progress * 100).toInt()}%',
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: NaiTheme.accent.withAlpha(20),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: NaiTheme.accent),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: ProgressRing(strokeWidth: 2),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'バックグラウンドアップロードを開始中...',
               style: TextStyle(
-                color: NaiTheme.text0,
                 fontSize: 12,
-                fontWeight: FontWeight.w500,
+                color: NaiTheme.accent,
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ProgressBar(value: _progress * 100),
-      ],
+          ),
+        ],
+      ),
     );
   }
 

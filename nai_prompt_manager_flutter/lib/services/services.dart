@@ -10,3 +10,4 @@ export 'nsfw_service.dart';
 export 'zip_extract_service.dart';
 export 'danbooru_service.dart';
 export 'suggestion_service.dart';
+export 'background_upload_service.dart';

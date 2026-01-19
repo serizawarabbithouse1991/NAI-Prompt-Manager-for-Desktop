@@ -299,6 +299,76 @@ class ImageRepository {
         .toList();
   }
 
+  /// 全ファイルハッシュを取得（重複チェック用キャッシュ）
+  /// O(1)での重複判定を可能にする
+  Future<Set<String>> getAllFileHashes() async {
+    final query = _db.customSelect('''
+      SELECT file_hash FROM images 
+      WHERE deleted_at IS NULL AND file_hash IS NOT NULL
+    ''');
+    
+    final results = await query.get();
+    return results
+        .map((r) => r.read<String>('file_hash'))
+        .toSet();
+  }
+
+  /// ハッシュが既に存在するかチェック
+  Future<bool> hashExists(String fileHash) async {
+    final query = _db.customSelect('''
+      SELECT 1 FROM images 
+      WHERE deleted_at IS NULL AND file_hash = ?
+      LIMIT 1
+    ''', variables: [Variable.withString(fileHash)]);
+    
+    final results = await query.get();
+    return results.isNotEmpty;
+  }
+
+  /// 複数画像を一括挿入（バッチ処理用）
+  Future<void> insertImages(List<(ImageModel, Prompt?)> items) async {
+    await _db.transaction(() async {
+      for (final (image, prompt) in items) {
+        await _db.into(_db.images).insert(db.ImagesCompanion.insert(
+          id: image.id,
+          folderId: Value(image.folderId),
+          filePath: image.filePath,
+          thumbnailPath: Value(image.thumbnailPath),
+          filename: Value(image.filename),
+          width: Value(image.width),
+          height: Value(image.height),
+          fileSize: Value(image.fileSize),
+          fileHash: Value(image.fileHash),
+          isNsfw: Value(image.isNsfw ?? false),
+          nsfwScore: Value(image.nsfwScore),
+          nsfwCategory: Value(image.nsfwCategory?.value),
+        ));
+
+        if (prompt != null) {
+          await _db.into(_db.prompts).insert(db.PromptsCompanion.insert(
+            id: prompt.id,
+            imageId: prompt.imageId,
+            positivePrompt: Value(prompt.positivePrompt),
+            negativePrompt: Value(prompt.negativePrompt),
+            model: Value(prompt.model),
+            sampler: Value(prompt.sampler),
+            steps: Value(prompt.steps),
+            cfgScale: Value(prompt.cfgScale),
+            seed: Value(prompt.seed),
+            resolutionWidth: Value(prompt.resolutionWidth),
+            resolutionHeight: Value(prompt.resolutionHeight),
+            noiseSchedule: Value(prompt.noiseSchedule),
+            promptGuidanceRescale: Value(prompt.promptGuidanceRescale),
+            notes: Value(prompt.notes),
+            rawMetadata: Value(prompt.rawMetadata),
+            sourceType: Value(prompt.sourceType.value),
+            workflowJson: Value(prompt.workflowJson),
+          ));
+        }
+      }
+    });
+  }
+
   /// 複数画像のタグを一括取得
   Future<Map<String, List<Tag>>> _getTagsForImages(List<String> imageIds) async {
     if (imageIds.isEmpty) return {};

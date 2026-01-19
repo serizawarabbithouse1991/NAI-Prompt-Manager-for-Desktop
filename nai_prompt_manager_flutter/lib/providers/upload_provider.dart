@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import '../data/models/models.dart';
+import '../data/repositories/repositories.dart';
 import '../services/image_import_service.dart';
+import '../services/background_upload_service.dart';
 import 'repository_providers.dart';
 import 'nsfw_provider.dart';
 import 'app_provider.dart';
@@ -111,7 +115,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
     state = state.copyWith(items: [...state.items, ...newItems]);
   }
 
-  /// 単一ファイルをアップロード
+  /// 単一ファイルをアップロード（レガシー: 互換性のため残す）
   Future<void> uploadFile({
     required String filePath,
     String? folderId,
@@ -127,7 +131,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
     }
   }
 
-  /// アップロードを開始
+  /// アップロードを開始（レガシー: 互換性のため残す）
   Future<void> startUpload({String? folderId}) async {
     if (state.isUploading) return;
 
@@ -215,7 +219,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
   }
 }
 
-/// アップロードのプロバイダー
+/// アップロードのプロバイダー（レガシー）
 final uploadProvider = StateNotifierProvider<UploadNotifier, UploadState>((ref) {
   final imageRepository = ref.watch(imageRepositoryProvider);
   final tagRepository = ref.watch(tagRepositoryProvider);
@@ -233,3 +237,100 @@ final uploadProvider = StateNotifierProvider<UploadNotifier, UploadState>((ref) 
 
 /// アップロードモーダル表示状態
 final uploadModalVisibleProvider = StateProvider<bool>((ref) => false);
+
+// ============================================================================
+// バックグラウンドアップロード関連
+// ============================================================================
+
+/// バックグラウンドアップロードサービスのプロバイダー
+final backgroundUploadServiceProvider = Provider<BackgroundUploadService>((ref) {
+  final service = BackgroundUploadService();
+  final imageRepository = ref.watch(imageRepositoryProvider);
+  final nsfwState = ref.watch(nsfwServiceProvider);
+  final appSettings = ref.watch(appSettingsProvider).settings;
+  
+  service.initialize(
+    imageRepository: imageRepository,
+    nsfwService: nsfwState.service,
+    enableNsfwDetection: appSettings.nsfwDetectionEnabled,
+  );
+  
+  return service;
+});
+
+/// バックグラウンドアップロード進捗のプロバイダー
+final backgroundUploadProgressProvider = StreamProvider<BackgroundUploadProgress>((ref) {
+  final service = ref.watch(backgroundUploadServiceProvider);
+  return service.progressStream;
+});
+
+/// 現在のアップロード進捗を取得（Stream以外から）
+final currentUploadProgressProvider = Provider<BackgroundUploadProgress>((ref) {
+  final service = ref.watch(backgroundUploadServiceProvider);
+  return service.currentProgress;
+});
+
+/// バックグラウンドアップロードを開始
+class BackgroundUploadNotifier extends StateNotifier<BackgroundUploadProgress> {
+  final BackgroundUploadService _service;
+  final ImageRepository _imageRepository;
+  StreamSubscription<BackgroundUploadProgress>? _subscription;
+  static const _uuid = Uuid();
+
+  BackgroundUploadNotifier(this._service, this._imageRepository) 
+      : super(const BackgroundUploadProgress()) {
+    _subscription = _service.progressStream.listen((progress) {
+      state = progress;
+    });
+  }
+
+  /// バックグラウンドアップロードを開始
+  Future<void> startUpload({
+    required List<String> filePaths,
+    String? folderId,
+  }) async {
+    // 既存ハッシュを取得（O(1)重複チェック用）
+    final existingHashes = await _imageRepository.getAllFileHashes();
+    
+    // タスクを作成
+    final tasks = filePaths.map((path) {
+      final fileName = path.split(RegExp(r'[/\\]')).last;
+      return UploadTask(
+        id: _uuid.v4(),
+        filePath: path,
+        fileName: fileName,
+        folderId: folderId,
+      );
+    }).toList();
+
+    // バックグラウンドアップロードを開始
+    await _service.startUpload(
+      tasks: tasks,
+      existingHashes: existingHashes,
+    );
+  }
+
+  /// キャンセル
+  void cancel() {
+    _service.cancel();
+  }
+
+  /// リセット
+  void reset() {
+    _service.reset();
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+}
+
+/// バックグラウンドアップロードのNotifierプロバイダー
+final backgroundUploadNotifierProvider = 
+    StateNotifierProvider<BackgroundUploadNotifier, BackgroundUploadProgress>((ref) {
+  final service = ref.watch(backgroundUploadServiceProvider);
+  final imageRepository = ref.watch(imageRepositoryProvider);
+  return BackgroundUploadNotifier(service, imageRepository);
+});

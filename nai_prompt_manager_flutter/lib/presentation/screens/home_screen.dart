@@ -2,6 +2,8 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../providers/providers.dart';
+import '../../services/background_upload_service.dart';
 import '../themes/nai_theme.dart';
 import 'dashboard_screen.dart';
 import 'gallery_screen.dart';
@@ -76,6 +78,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    final uploadProgress = ref.watch(backgroundUploadNotifierProvider);
+
     return NavigationView(
       appBar: NavigationAppBar(
         automaticallyImplyLeading: false,
@@ -97,6 +101,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WindowListener {
         actions: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
+            // グローバルアップロード進捗インジケーター
+            if (uploadProgress.isRunning || 
+                (uploadProgress.total > 0 && !uploadProgress.isComplete))
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: _GlobalUploadProgress(progress: uploadProgress),
+              ),
             // アップロードボタン
             Padding(
               padding: const EdgeInsets.only(right: 8),
@@ -128,6 +139,106 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WindowListener {
         items: _items,
       ),
     );
+  }
+}
+
+/// グローバルアップロード進捗インジケーター
+class _GlobalUploadProgress extends ConsumerWidget {
+  final BackgroundUploadProgress progress;
+
+  const _GlobalUploadProgress({required this.progress});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final percentage = (progress.progress * 100).toInt();
+    final isComplete = progress.isComplete;
+    
+    return Tooltip(
+      message: _buildTooltipMessage(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isComplete ? NaiTheme.success.withAlpha(30) : NaiTheme.accent.withAlpha(30),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isComplete ? NaiTheme.success : NaiTheme.accent,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (progress.isRunning) ...[
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: ProgressRing(
+                  strokeWidth: 2,
+                  activeColor: NaiTheme.accent,
+                ),
+              ),
+              const SizedBox(width: 8),
+            ] else if (isComplete) ...[
+              Icon(
+                FluentIcons.check_mark,
+                size: 14,
+                color: NaiTheme.success,
+              ),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              isComplete
+                  ? '完了: ${progress.completed}件'
+                  : '$percentage% (${progress.processed}/${progress.total})',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: isComplete ? NaiTheme.success : NaiTheme.text0,
+              ),
+            ),
+            if (isComplete) ...[
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () {
+                  ref.read(backgroundUploadNotifierProvider.notifier).reset();
+                  // 画像リストをリフレッシュ
+                  ref.read(imageListProvider.notifier).refreshImages();
+                },
+                child: Icon(
+                  FluentIcons.cancel,
+                  size: 12,
+                  color: NaiTheme.text2,
+                ),
+              ),
+            ] else ...[
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () {
+                  ref.read(backgroundUploadNotifierProvider.notifier).cancel();
+                },
+                child: Icon(
+                  FluentIcons.cancel,
+                  size: 12,
+                  color: NaiTheme.text2,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _buildTooltipMessage() {
+    final buffer = StringBuffer();
+    buffer.writeln('アップロード進捗');
+    buffer.writeln('成功: ${progress.completed}件');
+    buffer.writeln('失敗: ${progress.failed}件');
+    buffer.writeln('重複: ${progress.duplicates}件');
+    if (progress.currentFile != null) {
+      buffer.writeln('処理中: ${progress.currentFile}');
+    }
+    return buffer.toString().trim();
   }
 }
 
