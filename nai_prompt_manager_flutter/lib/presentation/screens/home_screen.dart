@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../themes/nai_theme.dart';
+import 'gallery_screen.dart';
 
 /// ホーム画面（メインナビゲーション）
 class HomeScreen extends ConsumerStatefulWidget {
@@ -24,7 +25,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WindowListener {
     PaneItem(
       icon: const Icon(FluentIcons.photo2),
       title: const Text('ギャラリー'),
-      body: const _PlaceholderPage(title: 'ギャラリー'),
+      body: const GalleryScreen(),
     ),
     PaneItem(
       icon: const Icon(FluentIcons.search),

@@ -235,3 +235,10 @@ final selectedImageProvider = Provider<ImageWithDetails?>((ref) {
   final firstId = selectedIds.first;
   return images.where((img) => img.id == firstId).firstOrNull;
 });
+
+/// 選択された画像の詳細を提供するプロバイダー
+final selectedImagesProvider = Provider<List<ImageWithDetails>>((ref) {
+  final selectedIds = ref.watch(selectedImageIdsProvider);
+  final imageState = ref.watch(imageListProvider);
+  return imageState.images.where((img) => selectedIds.contains(img.id)).toList();
+});

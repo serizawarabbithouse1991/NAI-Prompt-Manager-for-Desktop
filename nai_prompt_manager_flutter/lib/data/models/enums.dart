@@ -20,18 +20,19 @@ enum NSFWCategory {
 
 /// AI生成ソースの種類
 enum AISourceType {
-  novelai('novelai'),
-  a1111('a1111'),
-  comfyui('comfyui'),
-  dalle('dalle'),
-  gemini('gemini'),
-  grok('grok'),
-  midjourney('midjourney'),
-  manual('manual'),
-  unknown('unknown');
+  novelai('novelai', 'NovelAI'),
+  a1111('a1111', 'Automatic1111'),
+  comfyui('comfyui', 'ComfyUI'),
+  dalle('dalle', 'DALL-E'),
+  gemini('gemini', 'Gemini'),
+  grok('grok', 'Grok'),
+  midjourney('midjourney', 'Midjourney'),
+  manual('manual', 'Manual'),
+  unknown('unknown', 'Unknown');
 
   final String value;
-  const AISourceType(this.value);
+  final String displayName;
+  const AISourceType(this.value, this.displayName);
 
   static AISourceType fromString(String? value) {
     if (value == null) return AISourceType.unknown;
