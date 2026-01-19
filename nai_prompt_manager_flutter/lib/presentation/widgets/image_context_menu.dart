@@ -11,6 +11,8 @@ import '../screens/image_detail_dialog.dart';
 
 /// 画像コンテキストメニュー
 class ImageContextMenu {
+  static OverlayEntry? _currentOverlay;
+
   /// コンテキストメニューを表示
   static void show(
     BuildContext context,
@@ -18,47 +20,44 @@ class ImageContextMenu {
     ImageWithDetails image,
     Offset position,
   ) {
+    // 既存のメニューを閉じる
+    _closeCurrentMenu();
+
     final selectedIds = ref.read(selectedImageIdsProvider);
     final isMultipleSelected = selectedIds.length > 1 && selectedIds.contains(image.id);
     final selectedCount = isMultipleSelected ? selectedIds.length : 1;
 
-    // FlyoutControllerを作成
-    final controller = FlyoutController();
-    final overlayEntry = OverlayEntry(
-      builder: (context) {
-        return GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () {
-            controller.close();
-          },
-          child: Stack(
-            children: [
-              // 背景（タップで閉じる）
-              Positioned.fill(
+    late OverlayEntry overlayEntry;
+    overlayEntry = OverlayEntry(
+      builder: (overlayContext) {
+        return Stack(
+          children: [
+            // 背景（タップで閉じる）
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _closeCurrentMenu(),
                 child: Container(color: Colors.transparent),
               ),
-              // メニュー本体
-              Positioned(
-                left: position.dx,
-                top: position.dy,
-                child: _buildMenu(context, ref, image, selectedIds, isMultipleSelected, selectedCount, controller),
-              ),
-            ],
-          ),
+            ),
+            // メニュー本体
+            Positioned(
+              left: position.dx,
+              top: position.dy,
+              child: _buildMenu(context, ref, image, selectedIds, isMultipleSelected, selectedCount),
+            ),
+          ],
         );
       },
     );
 
+    _currentOverlay = overlayEntry;
     Overlay.of(context).insert(overlayEntry);
+  }
 
-    // コントローラーのクローズ時にオーバーレイを削除
-    Future.delayed(Duration.zero, () {
-      controller.addListener(() {
-        if (!controller.isOpen) {
-          overlayEntry.remove();
-        }
-      });
-    });
+  static void _closeCurrentMenu() {
+    _currentOverlay?.remove();
+    _currentOverlay = null;
   }
 
   static Widget _buildMenu(
@@ -68,10 +67,9 @@ class ImageContextMenu {
     Set<String> selectedIds,
     bool isMultipleSelected,
     int selectedCount,
-    FlyoutController controller,
   ) {
     void closeMenu() {
-      controller.close();
+      _closeCurrentMenu();
     }
 
     return Container(

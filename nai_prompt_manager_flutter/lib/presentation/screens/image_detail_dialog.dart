@@ -21,11 +21,12 @@ class ImageDetailDialog extends ConsumerStatefulWidget {
   ConsumerState<ImageDetailDialog> createState() => _ImageDetailDialogState();
 
   /// ダイアログを表示
-  static Future<void> show(BuildContext context, String imageId) {
-    return showDialog(
+  static Future<void> show(BuildContext context, String imageId) async {
+    await showDialog<void>(
       context: context,
       barrierDismissible: true,
-      builder: (context) => ImageDetailDialog(imageId: imageId),
+      dismissWithEsc: true,
+      builder: (dialogContext) => ImageDetailDialog(imageId: imageId),
     );
   }
 }
@@ -53,21 +54,25 @@ class _ImageDetailDialogState extends ConsumerState<ImageDetailDialog> {
 
     return ContentDialog(
       constraints: const BoxConstraints(maxWidth: 1200, maxHeight: 800),
-      content: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // 左側: 画像プレビュー
-          Expanded(
-            flex: 3,
-            child: _buildImagePreview(image),
-          ),
-          const SizedBox(width: 16),
-          // 右側: 情報パネル
-          SizedBox(
-            width: 350,
-            child: _buildInfoPanel(image),
-          ),
-        ],
+      content: SizedBox(
+        width: 1100,
+        height: 650,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 左側: 画像プレビュー
+            Expanded(
+              flex: 3,
+              child: _buildImagePreview(image),
+            ),
+            const SizedBox(width: 16),
+            // 右側: 情報パネル
+            SizedBox(
+              width: 350,
+              child: _buildInfoPanel(image),
+            ),
+          ],
+        ),
       ),
       actions: [
         Button(
@@ -169,25 +174,27 @@ class _ImageDetailDialogState extends ConsumerState<ImageDetailDialog> {
         const SizedBox(height: 16),
         
         // タブ
-        TabView(
-          currentIndex: _selectedTab,
-          onChanged: (index) => setState(() => _selectedTab = index),
-          tabWidthBehavior: TabWidthBehavior.sizeToContent,
-          closeButtonVisibility: CloseButtonVisibilityMode.never,
-          tabs: [
-            Tab(
-              text: const Text('プロンプト'),
-              body: _buildPromptTab(image),
-            ),
-            Tab(
-              text: const Text('情報'),
-              body: _buildInfoTab(image),
-            ),
-            Tab(
-              text: const Text('タグ'),
-              body: _buildTagsTab(image),
-            ),
-          ],
+        Expanded(
+          child: TabView(
+            currentIndex: _selectedTab,
+            onChanged: (index) => setState(() => _selectedTab = index),
+            tabWidthBehavior: TabWidthBehavior.sizeToContent,
+            closeButtonVisibility: CloseButtonVisibilityMode.never,
+            tabs: [
+              Tab(
+                text: const Text('プロンプト'),
+                body: _buildPromptTab(image),
+              ),
+              Tab(
+                text: const Text('情報'),
+                body: _buildInfoTab(image),
+              ),
+              Tab(
+                text: const Text('タグ'),
+                body: _buildTagsTab(image),
+              ),
+            ],
+          ),
         ),
       ],
     );

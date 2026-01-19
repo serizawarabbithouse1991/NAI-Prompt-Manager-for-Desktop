@@ -45,6 +45,7 @@ class ImageGrid extends ConsumerWidget {
         return false;
       },
       child: GridView.builder(
+        key: ValueKey('grid_${thumbnailSize.pixels}'),
         padding: const EdgeInsets.all(16),
         gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
           maxCrossAxisExtent: itemSize,
