@@ -12,3 +12,4 @@ export 'explorer_provider.dart';
 export 'danbooru_provider.dart';
 export 'nsfw_provider.dart';
 export 'suggestion_provider.dart';
+export 'rescan_provider.dart';

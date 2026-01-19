@@ -11,16 +11,176 @@ class PromptAnalysisScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final imageState = ref.watch(imageListProvider);
+    final rescanState = ref.watch(rescanProvider);
 
     return ScaffoldPage.scrollable(
-      header: const PageHeader(title: Text('プロンプト分析')),
+      header: PageHeader(
+        title: const Text('プロンプト分析'),
+        commandBar: CommandBar(
+          mainAxisAlignment: MainAxisAlignment.end,
+          primaryItems: [
+            CommandBarButton(
+              icon: const Icon(FluentIcons.refresh),
+              label: const Text('更新'),
+              onPressed: imageState.loading || rescanState.isScanning
+                  ? null
+                  : () => ref.read(imageListProvider.notifier).refreshImages(),
+            ),
+            CommandBarButton(
+              icon: const Icon(FluentIcons.search),
+              label: const Text('再スキャン'),
+              onPressed: imageState.loading || rescanState.isScanning
+                  ? null
+                  : () => _showRescanDialog(context, ref),
+            ),
+          ],
+        ),
+      ),
       children: [
+        // 再スキャン進捗表示
+        if (rescanState.isScanning || rescanState.isComplete)
+          _buildRescanProgress(context, ref, rescanState),
+        
         if (imageState.loading)
           const Center(child: ProgressRing())
         else if (imageState.images.isEmpty)
           _buildEmptyState()
         else
           _buildAnalysisContent(imageState),
+      ],
+    );
+  }
+
+  void _showRescanDialog(BuildContext context, WidgetRef ref) async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => ContentDialog(
+        title: const Text('メタデータ再スキャン'),
+        content: const Text(
+          '全画像ファイルからメタデータを再抽出します。\n'
+          'この処理には時間がかかる場合があります。\n\n'
+          'どの画像を対象にしますか？',
+        ),
+        actions: [
+          Button(
+            child: const Text('キャンセル'),
+            onPressed: () => Navigator.pop(context),
+          ),
+          Button(
+            child: const Text('プロンプトなしのみ'),
+            onPressed: () => Navigator.pop(context, 'without_prompt'),
+          ),
+          FilledButton(
+            child: const Text('すべて'),
+            onPressed: () => Navigator.pop(context, 'all'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      ref.read(rescanProvider.notifier).startRescan(
+        onlyWithoutPrompt: result == 'without_prompt',
+      );
+    }
+  }
+
+  Widget _buildRescanProgress(BuildContext context, WidgetRef ref, RescanState state) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  state.isComplete ? FluentIcons.check_mark : FluentIcons.search,
+                  color: state.isComplete ? Colors.green : NaiTheme.accent,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  state.isComplete ? '再スキャン完了' : '再スキャン中...',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: NaiTheme.text0,
+                  ),
+                ),
+                const Spacer(),
+                if (state.isScanning)
+                  Button(
+                    child: const Text('キャンセル'),
+                    onPressed: () => ref.read(rescanProvider.notifier).cancel(),
+                  )
+                else if (state.isComplete)
+                  IconButton(
+                    icon: const Icon(FluentIcons.chrome_close),
+                    onPressed: () {
+                      ref.read(rescanProvider.notifier).reset();
+                      // 完了後にデータを更新
+                      ref.read(imageListProvider.notifier).refreshImages();
+                    },
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (state.isScanning) ...[
+              ProgressBar(value: state.progress * 100),
+              const SizedBox(height: 8),
+              Text(
+                '${state.currentCount} / ${state.totalCount}',
+                style: TextStyle(fontSize: 12, color: NaiTheme.text2),
+              ),
+              if (state.currentFile != null)
+                Text(
+                  state.currentFile!,
+                  style: TextStyle(fontSize: 12, color: NaiTheme.text2),
+                  overflow: TextOverflow.ellipsis,
+                ),
+            ],
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 16,
+              runSpacing: 4,
+              children: [
+                _buildStatChip('新規', state.newCount, Colors.green),
+                _buildStatChip('更新', state.updatedCount, Colors.blue),
+                _buildStatChip('スキップ', state.skippedCount, Colors.grey),
+                if (state.failedCount > 0)
+                  _buildStatChip('失敗', state.failedCount, Colors.red),
+              ],
+            ),
+            if (state.error != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                state.error!,
+                style: TextStyle(fontSize: 12, color: Colors.red),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatChip(String label, int count, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          '$label: $count',
+          style: TextStyle(fontSize: 12, color: NaiTheme.text1),
+        ),
       ],
     );
   }
