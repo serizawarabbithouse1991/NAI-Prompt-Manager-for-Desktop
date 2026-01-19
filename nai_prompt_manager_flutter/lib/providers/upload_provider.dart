@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/models.dart';
+import '../services/image_import_service.dart';
+import 'repository_providers.dart';
 
 /// アップロード進捗項目
 class UploadItem {
@@ -90,7 +92,9 @@ class UploadState {
 
 /// アップロードのNotifier
 class UploadNotifier extends StateNotifier<UploadState> {
-  UploadNotifier() : super(const UploadState());
+  final ImageImportService _importService;
+
+  UploadNotifier(this._importService) : super(const UploadState());
 
   /// ファイルを追加
   void addFiles(List<File> files) {
@@ -105,8 +109,24 @@ class UploadNotifier extends StateNotifier<UploadState> {
     state = state.copyWith(items: [...state.items, ...newItems]);
   }
 
+  /// 単一ファイルをアップロード
+  Future<void> uploadFile({
+    required String filePath,
+    String? folderId,
+  }) async {
+    final result = await _importService.importImage(
+      sourcePath: filePath,
+      folderId: folderId,
+      checkDuplicates: true,
+    );
+
+    if (result.status == ImportStatus.error) {
+      throw Exception(result.error);
+    }
+  }
+
   /// アップロードを開始
-  Future<void> startUpload() async {
+  Future<void> startUpload({String? folderId}) async {
     if (state.isUploading) return;
 
     state = state.copyWith(isUploading: true);
@@ -119,18 +139,35 @@ class UploadNotifier extends StateNotifier<UploadState> {
       _updateItem(item.id, item.copyWith(status: UploadStatus.processing));
 
       try {
-        // TODO: 実際のアップロード処理
-        await Future.delayed(const Duration(milliseconds: 500));
-
-        // 完了
-        _updateItem(
-          item.id,
-          item.copyWith(
-            status: UploadStatus.completed,
-            progress: 1.0,
-          ),
+        final result = await _importService.importImage(
+          sourcePath: item.filePath,
+          folderId: folderId,
+          checkDuplicates: true,
         );
-        state = state.copyWith(completedCount: state.completedCount + 1);
+
+        if (result.status == ImportStatus.success) {
+          // 完了
+          _updateItem(
+            item.id,
+            item.copyWith(
+              status: UploadStatus.completed,
+              progress: 1.0,
+            ),
+          );
+          state = state.copyWith(completedCount: state.completedCount + 1);
+        } else if (result.status == ImportStatus.duplicate) {
+          // 重複
+          _updateItem(
+            item.id,
+            item.copyWith(
+              status: UploadStatus.failed,
+              error: '重複ファイル',
+            ),
+          );
+          state = state.copyWith(failedCount: state.failedCount + 1);
+        } else {
+          throw Exception(result.error);
+        }
       } catch (e) {
         // 失敗
         _updateItem(
@@ -178,7 +215,9 @@ class UploadNotifier extends StateNotifier<UploadState> {
 
 /// アップロードのプロバイダー
 final uploadProvider = StateNotifierProvider<UploadNotifier, UploadState>((ref) {
-  return UploadNotifier();
+  final imageRepository = ref.watch(imageRepositoryProvider);
+  final importService = ImageImportService(imageRepository);
+  return UploadNotifier(importService);
 });
 
 /// アップロードモーダル表示状態

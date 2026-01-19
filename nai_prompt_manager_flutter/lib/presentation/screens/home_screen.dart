@@ -5,6 +5,8 @@ import 'package:window_manager/window_manager.dart';
 import '../themes/nai_theme.dart';
 import 'gallery_screen.dart';
 import 'settings_screen.dart';
+import 'upload_dialog.dart';
+import 'search_screen.dart';
 
 /// ホーム画面（メインナビゲーション）
 class HomeScreen extends ConsumerStatefulWidget {
@@ -30,8 +32,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WindowListener {
     ),
     PaneItem(
       icon: const Icon(FluentIcons.search),
-      title: const Text('類似検索'),
-      body: const _PlaceholderPage(title: '類似検索'),
+      title: const Text('検索'),
+      body: const SearchScreen(),
     ),
     PaneItem(
       icon: const Icon(FluentIcons.edit),
@@ -94,7 +96,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WindowListener {
                   ],
                 ),
                 onPressed: () {
-                  // TODO: アップロードモーダルを開く
+                  UploadDialog.show(context);
                 },
               ),
             ),
