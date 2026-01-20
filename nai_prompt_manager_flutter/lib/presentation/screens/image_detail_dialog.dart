@@ -9,6 +9,7 @@ import '../../data/repositories/repositories.dart';
 import '../../providers/providers.dart';
 import '../../services/danbooru_tagging_service.dart';
 import '../themes/nai_theme.dart';
+import '../widgets/reprompt_panel.dart';
 
 /// 画像詳細ダイアログ
 class ImageDetailDialog extends ConsumerStatefulWidget {
@@ -350,8 +351,12 @@ class _ImageDetailDialogState extends ConsumerState<ImageDetailDialog> {
             closeButtonVisibility: CloseButtonVisibilityMode.never,
             tabs: [
               Tab(
-                text: const Text('プロンプト'),
+                text: const Text('Re-Prompt'),
                 body: _buildPromptTab(image),
+              ),
+              Tab(
+                text: const Text('オリジナル'),
+                body: _buildOriginalPromptTab(image),
               ),
               Tab(
                 text: const Text('情報'),
@@ -369,6 +374,26 @@ class _ImageDetailDialogState extends ConsumerState<ImageDetailDialog> {
   }
 
   Widget _buildPromptTab(ImageWithDetails image) {
+    final prompt = image.prompt;
+
+    if (prompt == null) {
+      return Center(
+        child: Text(
+          'プロンプト情報がありません',
+          style: TextStyle(color: NaiTheme.text2),
+        ),
+      );
+    }
+
+    // Re-Prompt Panelを使用
+    return RePromptPanel(
+      positivePrompt: prompt.positivePrompt,
+      negativePrompt: prompt.negativePrompt,
+      onCopySuccess: () => _showCopyNotification('コピーしました'),
+    );
+  }
+
+  Widget _buildOriginalPromptTab(ImageWithDetails image) {
     final prompt = image.prompt;
 
     if (prompt == null) {

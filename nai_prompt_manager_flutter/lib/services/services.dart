@@ -13,3 +13,5 @@ export 'danbooru_tagging_service.dart';
 export 'suggestion_service.dart';
 export 'background_upload_service.dart';
 export 'rescan_service.dart';
+export 'tag_dictionary.dart';
+export 'prompt_processor_service.dart';
