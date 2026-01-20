@@ -13,6 +13,7 @@ import 'settings_screen.dart';
 import 'upload_dialog.dart';
 import 'search_screen.dart';
 import 'upload_history_screen.dart';
+import 'bulk_tagging_dialog.dart';
 
 /// ホーム画面（メインナビゲーション）
 class HomeScreen extends ConsumerStatefulWidget {
@@ -108,6 +109,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WindowListener {
                 padding: const EdgeInsets.only(right: 12),
                 child: _GlobalUploadProgress(progress: uploadProgress),
               ),
+            // 一括タグ付けボタン
+            Builder(
+              builder: (context) {
+                final danbooruState = ref.watch(danbooruServiceProvider);
+                if (!danbooruState.available) return const SizedBox.shrink();
+                
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Tooltip(
+                    message: 'Danbooruタグ一括付与',
+                    child: Button(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(FluentIcons.tag, size: 14, color: NaiTheme.accent),
+                          const SizedBox(width: 6),
+                          const Text('自動タグ付け'),
+                        ],
+                      ),
+                      onPressed: () {
+                        BulkTaggingDialog.show(context);
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
             // アップロードボタン
             Padding(
               padding: const EdgeInsets.only(right: 8),

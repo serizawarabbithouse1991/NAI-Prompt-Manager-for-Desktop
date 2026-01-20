@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/models/models.dart';
+import '../../data/repositories/repositories.dart';
 import '../../providers/providers.dart';
+import '../../services/danbooru_tagging_service.dart';
 import '../themes/nai_theme.dart';
 
 /// 画像詳細ダイアログ
@@ -502,55 +504,151 @@ class _ImageDetailDialogState extends ConsumerState<ImageDetailDialog> {
   }
 
   Widget _buildTagsTab(ImageWithDetails image) {
-    if (image.tags.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+    final danbooruState = ref.watch(danbooruServiceProvider);
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Danbooruタグ取得ボタン
+        if (danbooruState.available)
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Button(
+              onPressed: () => _fetchDanbooruTags(image),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(FluentIcons.sync, size: 14, color: NaiTheme.accent),
+                  const SizedBox(width: 6),
+                  const Text('Danbooruタグを取得'),
+                ],
+              ),
+            ),
+          ),
+        
+        // タグ一覧
+        Expanded(
+          child: image.tags.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'タグがありません',
+                        style: TextStyle(color: NaiTheme.text2),
+                      ),
+                      const SizedBox(height: 8),
+                      FilledButton(
+                        child: const Text('タグを追加'),
+                        onPressed: () => _showAddTagDialog(image),
+                      ),
+                    ],
+                  ),
+                )
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(8),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: image.tags.map((tag) {
+                      return Button(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (tag.color != null)
+                              Container(
+                                width: 8,
+                                height: 8,
+                                margin: const EdgeInsets.only(right: 4),
+                                decoration: BoxDecoration(
+                                  color: Color(int.parse(tag.color!.replaceFirst('#', '0xFF'))),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            Text(tag.name),
+                          ],
+                        ),
+                        onPressed: () {
+                          // TODO: タグで絞り込み
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  /// Danbooruからタグを取得して付与
+  Future<void> _fetchDanbooruTags(ImageWithDetails image) async {
+    final db = ref.read(databaseProvider);
+    final imageRepository = ImageRepository(db);
+    final tagRepository = TagRepository(db);
+    
+    final service = DanbooruTaggingService(
+      imageRepository: imageRepository,
+      tagRepository: tagRepository,
+    );
+
+    // 処理中のインジケーターを表示
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => ContentDialog(
+        title: const Text('Danbooruタグ取得中'),
+        content: Row(
           children: [
-            Text(
-              'タグがありません',
-              style: TextStyle(color: NaiTheme.text2),
-            ),
-            const SizedBox(height: 8),
-            FilledButton(
-              child: const Text('タグを追加'),
-              onPressed: () => _showAddTagDialog(image),
-            ),
+            const ProgressRing(),
+            const SizedBox(width: 16),
+            Text('MD5ハッシュで検索しています...', style: TextStyle(color: NaiTheme.text1)),
           ],
         ),
-      );
-    }
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(8),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: image.tags.map((tag) {
-          return Button(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (tag.color != null)
-                  Container(
-                    width: 8,
-                    height: 8,
-                    margin: const EdgeInsets.only(right: 4),
-                    decoration: BoxDecoration(
-                      color: Color(int.parse(tag.color!.replaceFirst('#', '0xFF'))),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                Text(tag.name),
-              ],
-            ),
-            onPressed: () {
-              // TODO: タグで絞り込み
-            },
-          );
-        }).toList(),
       ),
     );
+
+    try {
+      final tags = await service.tagImage(image.id);
+      
+      if (mounted) {
+        Navigator.pop(context); // ダイアログを閉じる
+        
+        if (tags.isEmpty) {
+          displayInfoBar(
+            context,
+            builder: (context, close) => InfoBar(
+              title: const Text('Danbooruに一致する画像が見つかりませんでした'),
+              severity: InfoBarSeverity.warning,
+            ),
+            duration: const Duration(seconds: 3),
+          );
+        } else {
+          // 画像リストを更新
+          ref.read(imageListProvider.notifier).refreshImages();
+          
+          displayInfoBar(
+            context,
+            builder: (context, close) => InfoBar(
+              title: Text('${tags.length}件のタグを付与しました'),
+              severity: InfoBarSeverity.success,
+            ),
+            duration: const Duration(seconds: 3),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        displayInfoBar(
+          context,
+          builder: (context, close) => InfoBar(
+            title: Text('エラー: $e'),
+            severity: InfoBarSeverity.error,
+          ),
+          duration: const Duration(seconds: 3),
+        );
+      }
+    }
   }
 
   Widget _buildKeyValueGrid(List<(String, String)> items) {
