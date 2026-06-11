@@ -22,6 +22,7 @@
     "fs:allow-copy-file",
     "fs:allow-write-file",
     "fs:allow-read-file",
+    "fs:allow-read-dir",
     "fs:allow-open",
     "fs:allow-read",
     "fs:allow-seek",

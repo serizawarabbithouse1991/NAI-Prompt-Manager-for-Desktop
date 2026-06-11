@@ -6,10 +6,11 @@ import { markFolderDeletedInICloud, markTagDeletedInICloud, syncFolderToICloud, 
 import { ensureSyncDirs, writeJsonFile } from './io'
 import { markImageDeletedInICloud, syncImageToICloud } from './image-sync'
 import { initializeSyncFolder, runFullExportToICloud } from './full-export'
-import type { FullExportProgress, FullExportResult } from './types'
+import { importAllFromICloud } from './import'
+import type { FullExportProgress, FullExportResult, SyncImportProgress, SyncImportResult } from './types'
 
 export * from './types'
-export { runFullExportToICloud, initializeSyncFolder }
+export { runFullExportToICloud, initializeSyncFolder, importAllFromICloud }
 
 function getSyncConfig(): { enabled: boolean; path: string } | null {
   const { settings } = useAppStore.getState()
@@ -150,6 +151,29 @@ export async function exportAllToICloud(
   }
   const result = await runFullExportToICloud(config.path, onProgress)
   if (result.success || result.exportedImages > 0) {
+    await touchLastSynced()
+  }
+  return result
+}
+
+export async function importAllFromICloudSync(
+  onProgress?: (progress: SyncImportProgress) => void
+): Promise<SyncImportResult> {
+  const config = getSyncConfig()
+  if (!config) {
+    return {
+      success: false,
+      importedImages: 0,
+      importedTags: 0,
+      importedFolders: 0,
+      skippedImages: 0,
+      failedImages: 0,
+      errors: ['iCloud同期が有効化されていないか、同期フォルダが未設定です'],
+    }
+  }
+
+  const result = await importAllFromICloud(config.path, onProgress)
+  if (result.success || result.importedImages > 0 || result.importedTags > 0 || result.importedFolders > 0) {
     await touchLastSynced()
   }
   return result

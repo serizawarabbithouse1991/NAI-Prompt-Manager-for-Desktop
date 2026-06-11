@@ -194,6 +194,33 @@ async function mirrorImportedImage(
   }
 }
 
+async function mirrorImportedImageToConfiguredPaths(
+  name: string,
+  bytesOrPath: Uint8Array | { path: string },
+  mirrorSettings: {
+    importMirrorEnabled: boolean
+    importMirrorPath: string
+    onedriveMirrorEnabled: boolean
+    onedriveMirrorPath: string
+  }
+): Promise<void> {
+  const targets: string[] = []
+  if (mirrorSettings.importMirrorEnabled && mirrorSettings.importMirrorPath) {
+    targets.push(mirrorSettings.importMirrorPath)
+  }
+  if (mirrorSettings.onedriveMirrorEnabled && mirrorSettings.onedriveMirrorPath) {
+    targets.push(mirrorSettings.onedriveMirrorPath)
+  }
+
+  for (const mirrorPath of targets) {
+    try {
+      await mirrorImportedImage(name, bytesOrPath, mirrorPath)
+    } catch (err) {
+      console.error(`Failed to mirror imported image ${name} to ${mirrorPath}:`, err)
+    }
+  }
+}
+
 
 export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const [plans, setPlans] = useState<ImportPlan[]>([])
@@ -280,13 +307,7 @@ export default function UploadModal({ isOpen, onClose }: UploadModalProps) {
       await copyFile(bytesOrPath.path, destPath)
     }
 
-    if (settings.importMirrorEnabled && settings.importMirrorPath) {
-      try {
-        await mirrorImportedImage(name, bytesOrPath, settings.importMirrorPath)
-      } catch (err) {
-        console.error(`Failed to mirror imported image ${name}:`, err)
-      }
-    }
+    await mirrorImportedImageToConfiguredPaths(name, bytesOrPath, settings)
 
     // Generate a downscaled WebP thumbnail so the gallery doesn't load full-size
     // images. Falls back to the full image (thumbnail_path = null) on failure.

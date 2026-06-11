@@ -168,6 +168,8 @@ export interface AppSettings {
   danbooruMinPopularity: number
   importMirrorEnabled: boolean
   importMirrorPath: string
+  onedriveMirrorEnabled: boolean
+  onedriveMirrorPath: string
   icloudSyncEnabled: boolean
   icloudSyncPath: string
   icloudSyncDeviceId: string

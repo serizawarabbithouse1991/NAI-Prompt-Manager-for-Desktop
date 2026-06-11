@@ -81,4 +81,21 @@ export interface FullExportResult {
   errors: string[]
 }
 
+export interface SyncImportProgress {
+  phase: 'init' | 'tags' | 'folders' | 'images' | 'done'
+  current: number
+  total: number
+  message: string
+}
+
+export interface SyncImportResult {
+  success: boolean
+  importedImages: number
+  importedTags: number
+  importedFolders: number
+  skippedImages: number
+  failedImages: number
+  errors: string[]
+}
+
 export type ImageSyncSource = ImageWithDetails

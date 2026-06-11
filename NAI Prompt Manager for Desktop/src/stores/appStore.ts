@@ -65,6 +65,8 @@ const defaultSettings: AppSettings = {
   danbooruMinPopularity: 0,
   importMirrorEnabled: true,
   importMirrorPath: 'C:\\Users\\rt032\\iCloudDrive\\NovelAI',
+  onedriveMirrorEnabled: true,
+  onedriveMirrorPath: 'C:\\Users\\rt032\\OneDrive\\004-Novel AI',
   icloudSyncEnabled: false,
   icloudSyncPath: 'C:\\Users\\rt032\\iCloudDrive\\NAI-Prompt-Manager',
   icloudSyncDeviceId: '',

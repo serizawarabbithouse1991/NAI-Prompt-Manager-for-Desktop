@@ -64,12 +64,23 @@
 }
 
 /* Title bar drag region */
+.app-titlebar {
+  height: calc(2.5rem + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
+}
+
 .titlebar-drag {
   -webkit-app-region: drag;
 }
 
 .titlebar-no-drag {
   -webkit-app-region: no-drag;
+}
+
+@media (pointer: coarse) and (max-width: 900px) {
+  .desktop-window-controls {
+    display: none;
+  }
 }
 
 /* Animations */

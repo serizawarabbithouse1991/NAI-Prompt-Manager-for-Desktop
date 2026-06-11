@@ -11,7 +11,7 @@ import { translate, useI18n } from './lib/i18n'
 export default function App() {
   const [initialized, setInitialized] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { sidebarOpen } = useAppStore()
+  const { sidebarOpen, setSidebarOpen } = useAppStore()
   const { t, language } = useI18n()
 
   useEffect(() => {
@@ -26,6 +26,16 @@ export default function App() {
     }
     init()
   }, [])
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px)')
+    const syncSidebar = () => {
+      if (media.matches) setSidebarOpen(false)
+    }
+    syncSidebar()
+    media.addEventListener('change', syncSidebar)
+    return () => media.removeEventListener('change', syncSidebar)
+  }, [setSidebarOpen])
 
   if (error) {
     return (

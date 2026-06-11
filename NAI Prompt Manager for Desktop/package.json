@@ -10,7 +10,12 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "ios:init": "tauri ios init",
+    "ios:dev": "tauri ios dev --open",
+    "ios:build": "tauri ios build",
+    "icloud:export": "node scripts/icloud-full-export.mjs",
+    "onedrive:mirror": "node scripts/onedrive-mirror-export.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.1.1",

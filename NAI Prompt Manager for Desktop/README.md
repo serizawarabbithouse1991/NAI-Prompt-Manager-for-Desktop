@@ -61,6 +61,88 @@ npm run tauri:build
 
 ビルドされたインストーラーは `src-tauri/target/release/bundle/` に出力されます。
 
+## iOS版の開発
+
+このプロジェクトは Tauri v2 ベースなので、同じ React 画面を iOS アプリとして利用できます。
+iOS のプロジェクト生成・実機起動・署名は macOS + Xcode が必要です。
+
+### 必要環境
+
+- macOS
+- Xcode
+- Rust / Node.js 18+
+- 実機配布・App Store 配布を行う場合は Apple Developer Program
+
+### 初回セットアップ
+
+```bash
+cd "NAI Prompt Manager for Desktop"
+npm install
+npm run ios:init
+```
+
+### iPhone / Simulator で起動
+
+```bash
+npm run ios:dev
+```
+
+実機で開発サーバーに接続する場合は、Tauri CLI が渡す `TAURI_DEV_HOST` を Vite が利用します。
+このリポジトリの `vite.config.ts` は iOS 実機開発向けに設定済みです。
+
+### iOSビルド
+
+```bash
+npm run ios:build
+```
+
+署名、Bundle ID、Provisioning Profile は Xcode 側で設定してください。
+Bundle ID は `src-tauri/tauri.conf.json` の `identifier` と合わせます。
+
+## データ共有
+
+デスクトップ版とiOS版は、iCloud Drive上の同期フォルダを経由してデータを共有します。
+
+推奨フォルダ:
+
+```text
+iCloud Drive/NAI-Prompt-Manager
+```
+
+同期フォルダ構造:
+
+```text
+NAI-Prompt-Manager/
+├── sync/
+│   ├── manifest.json
+│   ├── device.json
+│   └── changes/
+├── images/
+├── thumbnails/
+├── meta/
+├── tags/
+└── folders/
+```
+
+### デスクトップからiOSへ共有
+
+1. デスクトップ版の設定で `iCloud Drive 同期` を有効にします。
+2. 同期フォルダに `iCloud Drive/NAI-Prompt-Manager` を選びます。
+3. 初回は `初回フルエクスポート` を実行します。
+4. iOS版で同じ同期フォルダを選び、`同期フォルダから取り込み` を実行します。
+
+### 共有されるデータ
+
+- 画像ファイル
+- サムネイル
+- プロンプト情報
+- タグ
+- フォルダ
+- お気に入り / レーティング
+
+現在の同期は「同期フォルダへの書き出し」と「同期フォルダからの取り込み」が中心です。
+同じ画像IDのデータは取り込み時に上書き更新されます。
+
 ## ディレクトリ構造
 
 ```

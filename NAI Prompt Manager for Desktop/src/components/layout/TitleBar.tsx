@@ -9,7 +9,7 @@ export default function TitleBar() {
   const handleClose = () => getCurrentWindow().close()
 
   return (
-    <header className="h-10 bg-nai-bg1 border-b border-nai-border flex items-center justify-between select-none">
+    <header className="app-titlebar bg-nai-bg1 border-b border-nai-border flex items-center justify-between select-none">
       {/* Left: Menu & Title */}
       <div className="flex items-center">
         {/* Sidebar Toggle */}
@@ -33,7 +33,7 @@ export default function TitleBar() {
       <div className="flex-1 titlebar-drag h-full" />
 
       {/* Right: Window Controls */}
-      <div className="flex items-center titlebar-no-drag">
+      <div className="desktop-window-controls flex items-center titlebar-no-drag">
         {/* Minimize */}
         <button
           onClick={handleMinimize}

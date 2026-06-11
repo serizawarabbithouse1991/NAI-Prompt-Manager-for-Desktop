@@ -123,6 +123,39 @@ export async function createImage(
   return created
 }
 
+export async function upsertImage(image: Image): Promise<void> {
+  const database = await getDatabase()
+  await database.execute(`
+    INSERT INTO images (
+      id, folder_id, file_path, thumbnail_path, filename, width, height,
+      file_size, file_hash, deleted_at, created_at
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    ON CONFLICT(id) DO UPDATE SET
+      folder_id = excluded.folder_id,
+      file_path = excluded.file_path,
+      thumbnail_path = excluded.thumbnail_path,
+      filename = excluded.filename,
+      width = excluded.width,
+      height = excluded.height,
+      file_size = excluded.file_size,
+      file_hash = excluded.file_hash,
+      deleted_at = excluded.deleted_at
+  `, [
+    image.id,
+    image.folder_id,
+    image.file_path,
+    image.thumbnail_path,
+    image.filename,
+    image.width,
+    image.height,
+    image.file_size,
+    image.file_hash,
+    image.deleted_at,
+    image.created_at,
+  ])
+}
+
 export async function updateImage(id: string, updates: Partial<Image>): Promise<void> {
   const database = await getDatabase()
   const fields: string[] = []
@@ -223,6 +256,77 @@ export async function updatePrompt(imageId: string, updates: Partial<Prompt>): P
   }
 }
 
+export async function upsertPrompt(prompt: Prompt): Promise<void> {
+  const database = await getDatabase()
+  const [existing] = await database.select<{ id: string }[]>(
+    `SELECT id FROM prompts WHERE image_id = $1`,
+    [prompt.image_id]
+  )
+
+  if (existing) {
+    await database.execute(`
+      UPDATE prompts SET
+        id = $1,
+        positive_prompt = $2,
+        negative_prompt = $3,
+        model = $4,
+        sampler = $5,
+        steps = $6,
+        cfg_scale = $7,
+        seed = $8,
+        resolution_width = $9,
+        resolution_height = $10,
+        noise_schedule = $11,
+        prompt_guidance_rescale = $12,
+        notes = $13,
+        raw_metadata = $14
+      WHERE image_id = $15
+    `, [
+      prompt.id,
+      prompt.positive_prompt,
+      prompt.negative_prompt,
+      prompt.model,
+      prompt.sampler,
+      prompt.steps,
+      prompt.cfg_scale,
+      prompt.seed,
+      prompt.resolution_width,
+      prompt.resolution_height,
+      prompt.noise_schedule,
+      prompt.prompt_guidance_rescale,
+      prompt.notes,
+      prompt.raw_metadata,
+      prompt.image_id,
+    ])
+  } else {
+    await database.execute(`
+      INSERT INTO prompts (
+        id, image_id, positive_prompt, negative_prompt, model, sampler, steps,
+        cfg_scale, seed, resolution_width, resolution_height, noise_schedule,
+        prompt_guidance_rescale, notes, raw_metadata, created_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+    `, [
+      prompt.id,
+      prompt.image_id,
+      prompt.positive_prompt,
+      prompt.negative_prompt,
+      prompt.model,
+      prompt.sampler,
+      prompt.steps,
+      prompt.cfg_scale,
+      prompt.seed,
+      prompt.resolution_width,
+      prompt.resolution_height,
+      prompt.noise_schedule,
+      prompt.prompt_guidance_rescale,
+      prompt.notes,
+      prompt.raw_metadata,
+      prompt.created_at,
+    ])
+  }
+}
+
 // ============================================
 // Tag Operations
 // ============================================
@@ -242,6 +346,17 @@ export async function createTag(name: string, color?: string): Promise<Tag> {
 
   const [tag] = await database.select<Tag[]>(`SELECT * FROM tags WHERE id = $1`, [id])
   return tag
+}
+
+export async function upsertTag(tag: Tag): Promise<void> {
+  const database = await getDatabase()
+  await database.execute(`
+    INSERT INTO tags (id, name, color, created_at)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      color = excluded.color
+  `, [tag.id, tag.name, tag.color, tag.created_at])
 }
 
 export async function getOrCreateTags(
@@ -347,6 +462,17 @@ export async function removeTagFromImage(imageId: string, tagId: string): Promis
   `, [imageId, tagId])
 }
 
+export async function replaceImageTags(imageId: string, tagIds: string[]): Promise<void> {
+  const database = await getDatabase()
+  await database.execute(`DELETE FROM image_tags WHERE image_id = $1`, [imageId])
+  for (const tagId of tagIds) {
+    await database.execute(
+      `INSERT OR IGNORE INTO image_tags (image_id, tag_id) VALUES ($1, $2)`,
+      [imageId, tagId]
+    )
+  }
+}
+
 // ============================================
 // Folder Operations
 // ============================================
@@ -377,6 +503,26 @@ export async function createFolder(
 
   const [folder] = await database.select<Folder[]>(`SELECT * FROM folders WHERE id = $1`, [id])
   return folder
+}
+
+export async function upsertFolder(folder: Folder): Promise<void> {
+  const database = await getDatabase()
+  await database.execute(`
+    INSERT INTO folders (id, parent_id, name, color, sort_order, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT(id) DO UPDATE SET
+      parent_id = excluded.parent_id,
+      name = excluded.name,
+      color = excluded.color,
+      sort_order = excluded.sort_order
+  `, [
+    folder.id,
+    folder.parent_id,
+    folder.name,
+    folder.color,
+    folder.sort_order,
+    folder.created_at,
+  ])
 }
 
 export async function updateFolder(id: string, updates: Partial<Folder>): Promise<void> {
@@ -461,6 +607,17 @@ export async function updateImageRating(
       VALUES ($1, $2, $3)
     `, [imageId, updates.is_favorite ?? false, updates.rating ?? null])
   }
+}
+
+export async function upsertImageRating(rating: ImageRating): Promise<void> {
+  const database = await getDatabase()
+  await database.execute(`
+    INSERT INTO image_ratings (image_id, is_favorite, rating)
+    VALUES ($1, $2, $3)
+    ON CONFLICT(image_id) DO UPDATE SET
+      is_favorite = excluded.is_favorite,
+      rating = excluded.rating
+  `, [rating.image_id, rating.is_favorite, rating.rating])
 }
 
 // ============================================

@@ -1,6 +1,7 @@
 import * as db from '../database'
 import { getDeviceInfo } from './device'
 import { ensureSyncDirs, writeJsonFile } from './io'
+import { exists } from '@tauri-apps/plugin-fs'
 import { syncFolderToICloud, syncTagToICloud } from './entity-sync'
 import { syncImageToICloud } from './image-sync'
 import { writeManifest, createEmptyManifest, readManifest } from './manifest'
@@ -104,6 +105,10 @@ export async function runFullExportToICloud(
 
 export async function initializeSyncFolder(syncPath: string): Promise<void> {
   const dirs = await ensureSyncDirs(syncPath)
-  await writeManifest(syncPath, createEmptyManifest())
-  await writeJsonFile(dirs.deviceFile, getDeviceInfo(null))
+  if (!(await exists(dirs.manifestFile))) {
+    await writeManifest(syncPath, createEmptyManifest())
+  }
+  if (!(await exists(dirs.deviceFile))) {
+    await writeJsonFile(dirs.deviceFile, getDeviceInfo(null))
+  }
 }

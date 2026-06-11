@@ -6,7 +6,14 @@ import { useFolderStore } from '../../stores/folderStore'
 import { useTagStore } from '../../stores/tagStore'
 import { exportAsJson, exportWithFiles, importFromJson } from '../../lib/export'
 import { autoTagImageFromPrompt, getDanbooruDbStats } from '../../lib/danbooru-tags'
-import { exportAllToICloud, setupICloudSync, type FullExportProgress } from '../../lib/icloud-sync'
+import {
+  exportAllToICloud,
+  importAllFromICloud,
+  setupICloudSync,
+  type FullExportProgress,
+  type SyncImportProgress,
+} from '../../lib/icloud-sync'
+import { bulkMirrorExistingImages, type MirrorProgress } from '../../lib/import-mirror'
 import { useI18n } from '../../lib/i18n'
 
 const DANBOORU_TAG_TYPES = [
@@ -25,6 +32,8 @@ export default function SettingsView() {
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [syncProgress, setSyncProgress] = useState<FullExportProgress | null>(null)
+  const [syncImportProgress, setSyncImportProgress] = useState<SyncImportProgress | null>(null)
+  const [mirrorProgress, setMirrorProgress] = useState<MirrorProgress | null>(null)
   const retagCancelRef = useRef(false)
   const { t } = useI18n()
 
@@ -154,17 +163,95 @@ export default function SettingsView() {
     }
   }
 
+  const handleImportIcloudSync = async () => {
+    if (!settings.icloudSyncPath) {
+      setMessage('iCloud同期フォルダを選択してください')
+      return
+    }
+
+    setBusy('icloud-import')
+    setSyncImportProgress(null)
+    setMessage(null)
+    try {
+      if (!settings.icloudSyncEnabled) {
+        updateSettings({ icloudSyncEnabled: true })
+      }
+      const result = await importAllFromICloud(
+        settings.icloudSyncPath,
+        (progress) => setSyncImportProgress(progress)
+      )
+      await Promise.all([loadFolders(), loadTags(), loadImages()])
+      updateSettings({ icloudSyncLastSyncedAt: new Date().toISOString() })
+      if (result.success) {
+        setMessage(
+          `iCloud取り込み完了: 画像 ${result.importedImages} 件 / タグ ${result.importedTags} 件 / フォルダ ${result.importedFolders} 件`
+        )
+      } else {
+        setMessage(
+          `iCloud取り込み完了（一部失敗）: 画像 ${result.importedImages} 件 / 失敗 ${result.failedImages} 件${result.errors.length > 0 ? ` — ${result.errors[0]}` : ''}`
+        )
+      }
+    } catch (err) {
+      console.error('iCloud import failed:', err)
+      setMessage('iCloud同期フォルダからの取り込みに失敗しました')
+    } finally {
+      setBusy(null)
+      setSyncImportProgress(null)
+    }
+  }
+
   const handleSelectImportMirrorPath = async () => {
     try {
       const selected = await open({
         directory: true,
-        title: 'インポート画像の自動コピー先を選択',
+        title: 'iCloud 自動コピー先を選択',
       })
       if (selected) {
         updateSettings({ importMirrorPath: selected as string })
       }
     } catch (err) {
       console.error('Failed to select mirror directory:', err)
+    }
+  }
+
+  const handleBulkOnedriveMirror = async () => {
+    if (!settings.onedriveMirrorPath) {
+      setMessage('OneDrive コピー先を選択してください')
+      return
+    }
+
+    setBusy('onedrive-mirror')
+    setMirrorProgress(null)
+    setMessage(null)
+    try {
+      const result = await bulkMirrorExistingImages(
+        settings.onedriveMirrorPath,
+        (progress) => setMirrorProgress(progress),
+        { skipExisting: true }
+      )
+      setMessage(
+        `OneDriveコピー完了: 新規 ${result.copied} 件 / スキップ ${result.skipped} 件 / 元ファイルなし ${result.missing} 件${result.failed > 0 ? ` / 失敗 ${result.failed} 件` : ''}`
+      )
+    } catch (err) {
+      console.error('OneDrive bulk mirror failed:', err)
+      setMessage('OneDriveへの一括コピーに失敗しました')
+    } finally {
+      setBusy(null)
+      setMirrorProgress(null)
+    }
+  }
+
+  const handleSelectOnedriveMirrorPath = async () => {
+    try {
+      const selected = await open({
+        directory: true,
+        title: 'OneDrive 自動コピー先を選択',
+      })
+      if (selected) {
+        updateSettings({ onedriveMirrorPath: selected as string })
+      }
+    } catch (err) {
+      console.error('Failed to select OneDrive mirror directory:', err)
     }
   }
 
@@ -328,36 +415,99 @@ export default function SettingsView() {
                 </select>
               </div>
 
-              <div className="pt-4 border-t border-nai-border">
-                <label className="flex items-center gap-3 text-sm text-nai-text mb-3">
-                  <input
-                    type="checkbox"
-                    checked={settings.importMirrorEnabled}
-                    onChange={(e) => updateSettings({ importMirrorEnabled: e.target.checked })}
-                    className="w-4 h-4 accent-nai-accent"
-                  />
-                  インポートした画像を自動コピーする
-                </label>
-                <label className="block text-sm text-nai-text-muted mb-2">
-                  自動コピー先
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={settings.importMirrorPath || '未設定'}
-                    readOnly
-                    className="flex-1 px-3 py-2 bg-nai-bg0 border border-nai-border rounded-lg text-nai-text text-sm"
-                  />
-                  <button
-                    onClick={handleSelectImportMirrorPath}
-                    className="px-4 py-2 bg-nai-bg2 hover:bg-nai-bg3 text-nai-text rounded-lg transition-colors text-sm"
-                  >
-                    {t('choose')}
-                  </button>
+              <div className="pt-4 border-t border-nai-border space-y-4">
+                <div>
+                  <label className="flex items-center gap-3 text-sm text-nai-text mb-3">
+                    <input
+                      type="checkbox"
+                      checked={settings.importMirrorEnabled}
+                      onChange={(e) => updateSettings({ importMirrorEnabled: e.target.checked })}
+                      className="w-4 h-4 accent-nai-accent"
+                    />
+                    iCloud に自動コピーする
+                  </label>
+                  <label className="block text-sm text-nai-text-muted mb-2">
+                    iCloud コピー先
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={settings.importMirrorPath || '未設定'}
+                      readOnly
+                      className="flex-1 px-3 py-2 bg-nai-bg0 border border-nai-border rounded-lg text-nai-text text-sm"
+                    />
+                    <button
+                      onClick={handleSelectImportMirrorPath}
+                      className="px-4 py-2 bg-nai-bg2 hover:bg-nai-bg3 text-nai-text rounded-lg transition-colors text-sm"
+                    >
+                      {t('choose')}
+                    </button>
+                  </div>
+                  <p className="mt-1 text-xs text-nai-text-placeholder">
+                    初期値: C:\Users\rt032\iCloudDrive\NovelAI
+                  </p>
                 </div>
-                <p className="mt-1 text-xs text-nai-text-placeholder">
-                  初期値: C:\Users\rt032\iCloudDrive\NovelAI
-                </p>
+
+                <div>
+                  <label className="flex items-center gap-3 text-sm text-nai-text mb-3">
+                    <input
+                      type="checkbox"
+                      checked={settings.onedriveMirrorEnabled}
+                      onChange={(e) => updateSettings({ onedriveMirrorEnabled: e.target.checked })}
+                      className="w-4 h-4 accent-nai-accent"
+                    />
+                    OneDrive に自動コピーする
+                  </label>
+                  <label className="block text-sm text-nai-text-muted mb-2">
+                    OneDrive コピー先
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={settings.onedriveMirrorPath || '未設定'}
+                      readOnly
+                      className="flex-1 px-3 py-2 bg-nai-bg0 border border-nai-border rounded-lg text-nai-text text-sm"
+                    />
+                    <button
+                      onClick={handleSelectOnedriveMirrorPath}
+                      className="px-4 py-2 bg-nai-bg2 hover:bg-nai-bg3 text-nai-text rounded-lg transition-colors text-sm"
+                    >
+                      {t('choose')}
+                    </button>
+                  </div>
+                  <p className="mt-1 text-xs text-nai-text-placeholder">
+                    初期値: C:\Users\rt032\OneDrive\004-Novel AI
+                  </p>
+                  <button
+                    onClick={handleBulkOnedriveMirror}
+                    disabled={busy !== null || !settings.onedriveMirrorPath}
+                    className="mt-3 w-full px-4 py-2 bg-nai-accent hover:bg-nai-accent-hover disabled:bg-nai-accent/50 text-nai-bg0 font-medium rounded-lg transition-colors text-sm"
+                  >
+                    {busy === 'onedrive-mirror' ? 'コピー中...' : '既存画像を OneDrive にコピー'}
+                  </button>
+                  {mirrorProgress && (
+                    <div className="mt-3 space-y-2">
+                      <div className="flex justify-between text-xs text-nai-text-muted">
+                        <span>{mirrorProgress.message}</span>
+                        <span>{mirrorProgress.current} / {mirrorProgress.total}</span>
+                      </div>
+                      <div className="h-2 bg-nai-bg0 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-nai-accent transition-all duration-300"
+                          style={{
+                            width:
+                              mirrorProgress.total > 0
+                                ? `${Math.min(100, (mirrorProgress.current / mirrorProgress.total) * 100)}%`
+                                : '0%',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {message && (busy === 'onedrive-mirror' || message.includes('OneDrive')) && (
+                    <p className="mt-2 text-sm text-nai-accent">{message}</p>
+                  )}
+                </div>
               </div>
             </div>
           </section>
@@ -421,6 +571,13 @@ export default function SettingsView() {
                 >
                   {busy === 'icloud-export' ? 'エクスポート中...' : '初回フルエクスポート'}
                 </button>
+                <button
+                  onClick={handleImportIcloudSync}
+                  disabled={busy !== null || !settings.icloudSyncPath}
+                  className="px-4 py-2 bg-nai-bg2 hover:bg-nai-bg3 disabled:opacity-50 text-nai-text rounded-lg transition-colors text-sm"
+                >
+                  {busy === 'icloud-import' ? '取り込み中...' : '同期フォルダから取り込み'}
+                </button>
               </div>
 
               {syncProgress && (
@@ -440,6 +597,30 @@ export default function SettingsView() {
                         width:
                           syncProgress.total > 0
                             ? `${Math.min(100, (syncProgress.current / syncProgress.total) * 100)}%`
+                            : '0%',
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {syncImportProgress && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs text-nai-text-muted">
+                    <span>{syncImportProgress.message}</span>
+                    <span>
+                      {syncImportProgress.total > 0
+                        ? `${Math.min(syncImportProgress.current, syncImportProgress.total)} / ${syncImportProgress.total}`
+                        : ''}
+                    </span>
+                  </div>
+                  <div className="h-2 bg-nai-bg0 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-nai-accent transition-all duration-300"
+                      style={{
+                        width:
+                          syncImportProgress.total > 0
+                            ? `${Math.min(100, (syncImportProgress.current / syncImportProgress.total) * 100)}%`
                             : '0%',
                       }}
                     />
