@@ -6,11 +6,13 @@ import GalleryView from './components/gallery/GalleryView'
 import SettingsView from './components/settings/SettingsView'
 import Sidebar from './components/sidebar/Sidebar'
 import TitleBar from './components/layout/TitleBar'
+import { translate, useI18n } from './lib/i18n'
 
 export default function App() {
   const [initialized, setInitialized] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { sidebarOpen } = useAppStore()
+  const { t, language } = useI18n()
 
   useEffect(() => {
     const init = async () => {
@@ -19,7 +21,7 @@ export default function App() {
         setInitialized(true)
       } catch (err) {
         console.error('Failed to initialize database:', err)
-        setError(err instanceof Error ? err.message : 'データベースの初期化に失敗しました')
+        setError(err instanceof Error ? err.message : translate(language, 'appErrorTitle'))
       }
     }
     init()
@@ -34,7 +36,7 @@ export default function App() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h2 className="text-xl font-bold text-white mb-2">エラーが発生しました</h2>
+          <h2 className="text-xl font-bold text-white mb-2">{t('appErrorTitle')}</h2>
           <p className="text-zinc-400">{error}</p>
         </div>
       </div>
@@ -46,7 +48,7 @@ export default function App() {
       <div className="h-screen flex items-center justify-center bg-nai-bg0">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-nai-accent border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-zinc-400">初期化中...</p>
+          <p className="text-zinc-400">{t('initializing')}</p>
         </div>
       </div>
     )

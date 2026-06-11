@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react'
 import type { ImageWithDetails, Tag } from '../../types'
 import { useImageStore } from '../../stores/imageStore'
+import { useAppStore } from '../../stores/appStore'
+import { useTagStore } from '../../stores/tagStore'
 import { pathToAssetUrl, formatFileSize, formatDate } from '../../lib/utils'
+import { autoTagImageFromPrompt } from '../../lib/danbooru-tags'
+import { exportImageFile } from '../../lib/export'
+import { useI18n } from '../../lib/i18n'
 
 interface ImageDetailProps {
   image: ImageWithDetails
@@ -12,9 +17,16 @@ interface ImageDetailProps {
 
 export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDetailProps) {
   const { toggleFavorite, addTagToImage, removeTagFromImage, updatePrompt, deleteImage } = useImageStore()
+  const { settings } = useAppStore()
+  const { loadTags } = useTagStore()
   const [editMode, setEditMode] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [retagging, setRetagging] = useState(false)
+  const [tagMessage, setTagMessage] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [exportMessage, setExportMessage] = useState<string | null>(null)
   const [imageError, setImageError] = useState(false)
+  const { t } = useI18n()
   const [formData, setFormData] = useState({
     positive_prompt: image.prompt?.positive_prompt || '',
     negative_prompt: image.prompt?.negative_prompt || '',
@@ -71,6 +83,41 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
     }
   }
 
+  const handleDanbooruRetag = async () => {
+    if (!settings.danbooruDbPath) {
+      setTagMessage(t('danbooruDbMissing'))
+      return
+    }
+    if (!image.prompt?.positive_prompt) {
+      setTagMessage(t('promptMissing'))
+      return
+    }
+
+    setRetagging(true)
+    setTagMessage(t('danbooruChecking'))
+    try {
+      const result = await autoTagImageFromPrompt(image.id, image.prompt, settings.danbooruDbPath, {
+        allowedTagTypes: settings.danbooruAllowedTagTypes,
+        maxTagsPerImage: settings.danbooruMaxTagsPerImage,
+        minPopularity: settings.danbooruMinPopularity,
+      })
+      const mergedTags = [...image.tags]
+      for (const tag of result.tags) {
+        if (!mergedTags.some((existing) => existing.id === tag.id)) {
+          mergedTags.push(tag)
+        }
+      }
+      onUpdate({ ...image, tags: mergedTags })
+      await loadTags()
+      setTagMessage(t('danbooruApplied', { count: result.matched.length }))
+    } catch (err) {
+      console.error('Danbooru retag failed:', err)
+      setTagMessage(t('exportFailed'))
+    } finally {
+      setRetagging(false)
+    }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -107,12 +154,26 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
   }
 
   const handleDelete = async () => {
-    if (!confirm('この画像を削除しますか？')) return
+    if (!confirm(t('deleteImageConfirm'))) return
     try {
       await deleteImage(image.id)
       onClose()
     } catch (err) {
       console.error('Failed to delete:', err)
+    }
+  }
+
+  const handleExport = async () => {
+    setExporting(true)
+    setExportMessage(null)
+    try {
+      const ok = await exportImageFile(image)
+      if (ok) setExportMessage(t('exportImageDone'))
+    } catch (err) {
+      console.error('Image export failed:', err)
+      setExportMessage(t('exportImageFailed'))
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -146,14 +207,14 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
         <div className="w-96 p-6 overflow-y-auto border-l border-nai-border scrollbar-thin">
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-nai-text">詳細</h3>
+            <h3 className="text-lg font-semibold text-nai-text">{t('detail')}</h3>
             <div className="flex items-center gap-2">
               {/* Edit button */}
               {!editMode && (
                 <button
                   onClick={() => setEditMode(true)}
                   className="p-2 bg-nai-bg2 text-nai-text-muted hover:bg-nai-bg3 rounded-lg transition-colors"
-                  title="編集"
+                  title={t('edit')}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -188,7 +249,7 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
           <div className="space-y-4">
             {/* Tags */}
             <div>
-              <label className="text-xs text-nai-text-muted uppercase tracking-wide">タグ</label>
+              <label className="text-xs text-nai-text-muted uppercase tracking-wide">{t('tags')}</label>
               <div className="mt-2 flex flex-wrap gap-2">
                 {image.tags.map((tag) => (
                   <span
@@ -218,18 +279,30 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
                     }}
                     defaultValue=""
                   >
-                    <option value="" disabled>+ タグを追加</option>
+                    <option value="" disabled>+ {t('addTagButton')}</option>
                     {availableTags.map((tag) => (
                       <option key={tag.id} value={tag.id}>{tag.name}</option>
                     ))}
                   </select>
                 )}
               </div>
+              <div className="mt-2 grid grid-cols-1 gap-2">
+                <button
+                  onClick={handleDanbooruRetag}
+                  disabled={retagging || !settings.danbooruDbPath || !image.prompt?.positive_prompt}
+                  className="px-3 py-2 bg-nai-bg2 hover:bg-nai-bg3 disabled:opacity-50 text-nai-text rounded-lg transition-colors text-sm"
+                >
+                  {retagging ? t('danbooruApplying') : t('danbooruApply')}
+                </button>
+                {tagMessage && (
+                  <p className="text-xs text-nai-accent">{tagMessage}</p>
+                )}
+              </div>
             </div>
 
             {/* Filename */}
             <div>
-              <label className="text-xs text-nai-text-muted uppercase tracking-wide">ファイル名</label>
+              <label className="text-xs text-nai-text-muted uppercase tracking-wide">{t('filename')}</label>
               <p className="text-nai-text mt-1">{image.filename || 'Untitled'}</p>
             </div>
 
@@ -237,7 +310,7 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
               /* Edit Mode */
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs text-nai-text-muted uppercase tracking-wide mb-2 block">プロンプト</label>
+                  <label className="text-xs text-nai-text-muted uppercase tracking-wide mb-2 block">{t('prompt')}</label>
                   <textarea
                     value={formData.positive_prompt}
                     onChange={(e) => setFormData({ ...formData, positive_prompt: e.target.value })}
@@ -246,7 +319,7 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-nai-text-muted uppercase tracking-wide mb-2 block">ネガティブプロンプト</label>
+                  <label className="text-xs text-nai-text-muted uppercase tracking-wide mb-2 block">{t('negativePrompt')}</label>
                   <textarea
                     value={formData.negative_prompt}
                     onChange={(e) => setFormData({ ...formData, negative_prompt: e.target.value })}
@@ -256,7 +329,7 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs text-nai-text-muted uppercase tracking-wide mb-1 block">モデル</label>
+                    <label className="text-xs text-nai-text-muted uppercase tracking-wide mb-1 block">{t('model')}</label>
                     <input
                       type="text"
                       value={formData.model}
@@ -265,7 +338,7 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-nai-text-muted uppercase tracking-wide mb-1 block">サンプラー</label>
+                    <label className="text-xs text-nai-text-muted uppercase tracking-wide mb-1 block">{t('sampler')}</label>
                     <input
                       type="text"
                       value={formData.sampler}
@@ -274,7 +347,7 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-nai-text-muted uppercase tracking-wide mb-1 block">ステップ</label>
+                    <label className="text-xs text-nai-text-muted uppercase tracking-wide mb-1 block">{t('steps')}</label>
                     <input
                       type="number"
                       value={formData.steps}
@@ -293,7 +366,7 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
                     />
                   </div>
                   <div className="col-span-2">
-                    <label className="text-xs text-nai-text-muted uppercase tracking-wide mb-1 block">シード</label>
+                    <label className="text-xs text-nai-text-muted uppercase tracking-wide mb-1 block">{t('seed')}</label>
                     <input
                       type="text"
                       value={formData.seed}
@@ -303,7 +376,7 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs text-nai-text-muted uppercase tracking-wide mb-2 block">メモ</label>
+                  <label className="text-xs text-nai-text-muted uppercase tracking-wide mb-2 block">{t('notes')}</label>
                   <textarea
                     value={formData.notes}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -317,14 +390,14 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
                     disabled={saving}
                     className="flex-1 px-4 py-2 bg-nai-accent hover:bg-nai-accent-hover disabled:bg-nai-accent/50 text-nai-bg0 font-medium rounded-lg transition-colors text-sm"
                   >
-                    {saving ? '保存中...' : '保存'}
+                    {saving ? t('saving') : t('save')}
                   </button>
                   <button
                     onClick={() => setEditMode(false)}
                     disabled={saving}
                     className="px-4 py-2 bg-nai-bg2 hover:bg-nai-bg3 text-nai-text rounded-lg transition-colors text-sm"
                   >
-                    キャンセル
+                    {t('cancel')}
                   </button>
                 </div>
               </div>
@@ -333,7 +406,7 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
               <>
                 {image.prompt?.positive_prompt && (
                   <div>
-                    <label className="text-xs text-nai-text-muted uppercase tracking-wide">プロンプト</label>
+                    <label className="text-xs text-nai-text-muted uppercase tracking-wide">{t('prompt')}</label>
                     <p className="text-nai-text mt-1 text-sm leading-relaxed whitespace-pre-wrap">
                       {image.prompt.positive_prompt}
                     </p>
@@ -341,7 +414,7 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
                 )}
                 {image.prompt?.negative_prompt && (
                   <div>
-                    <label className="text-xs text-nai-text-muted uppercase tracking-wide">ネガティブプロンプト</label>
+                    <label className="text-xs text-nai-text-muted uppercase tracking-wide">{t('negativePrompt')}</label>
                     <p className="text-nai-text-muted mt-1 text-sm leading-relaxed whitespace-pre-wrap">
                       {image.prompt.negative_prompt}
                     </p>
@@ -351,19 +424,19 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
                   <div className="grid grid-cols-2 gap-3">
                     {image.prompt.model && (
                       <div>
-                        <label className="text-xs text-nai-text-muted uppercase tracking-wide">モデル</label>
+                        <label className="text-xs text-nai-text-muted uppercase tracking-wide">{t('model')}</label>
                         <p className="text-nai-text mt-1 text-sm">{image.prompt.model}</p>
                       </div>
                     )}
                     {image.prompt.sampler && (
                       <div>
-                        <label className="text-xs text-nai-text-muted uppercase tracking-wide">サンプラー</label>
+                        <label className="text-xs text-nai-text-muted uppercase tracking-wide">{t('sampler')}</label>
                         <p className="text-nai-text mt-1 text-sm">{image.prompt.sampler}</p>
                       </div>
                     )}
                     {image.prompt.steps && (
                       <div>
-                        <label className="text-xs text-nai-text-muted uppercase tracking-wide">ステップ</label>
+                        <label className="text-xs text-nai-text-muted uppercase tracking-wide">{t('steps')}</label>
                         <p className="text-nai-text mt-1 text-sm">{image.prompt.steps}</p>
                       </div>
                     )}
@@ -375,7 +448,7 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
                     )}
                     {image.prompt.seed != null && (
                       <div className="col-span-2">
-                        <label className="text-xs text-nai-text-muted uppercase tracking-wide">シード</label>
+                        <label className="text-xs text-nai-text-muted uppercase tracking-wide">{t('seed')}</label>
                         <p className="text-nai-text mt-1 text-sm font-mono">{image.prompt.seed}</p>
                       </div>
                     )}
@@ -387,7 +460,7 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
             {/* File Info */}
             {(image.width || image.height) && (
               <div>
-                <label className="text-xs text-nai-text-muted uppercase tracking-wide">解像度</label>
+                <label className="text-xs text-nai-text-muted uppercase tracking-wide">{t('resolution')}</label>
                 <p className="text-nai-text mt-1 text-sm">
                   {image.width} × {image.height}
                 </p>
@@ -395,22 +468,32 @@ export default function ImageDetail({ image, tags, onClose, onUpdate }: ImageDet
             )}
             {image.file_size && (
               <div>
-                <label className="text-xs text-nai-text-muted uppercase tracking-wide">ファイルサイズ</label>
+                <label className="text-xs text-nai-text-muted uppercase tracking-wide">{t('fileSize')}</label>
                 <p className="text-nai-text mt-1 text-sm">{formatFileSize(image.file_size)}</p>
               </div>
             )}
             <div>
-              <label className="text-xs text-nai-text-muted uppercase tracking-wide">作成日時</label>
+              <label className="text-xs text-nai-text-muted uppercase tracking-wide">{t('createdAt')}</label>
               <p className="text-nai-text mt-1 text-sm">{formatDate(image.created_at)}</p>
             </div>
 
             {/* Delete button */}
             <div className="pt-4 border-t border-nai-border">
               <button
+                onClick={handleExport}
+                disabled={exporting}
+                className="w-full px-4 py-2 mb-2 bg-nai-bg2 hover:bg-nai-bg3 disabled:opacity-50 text-nai-text rounded-lg transition-colors text-sm"
+              >
+                {exporting ? t('exporting') : t('exportImage')}
+              </button>
+              {exportMessage && (
+                <p className="text-xs text-nai-accent mb-2">{exportMessage}</p>
+              )}
+              <button
                 onClick={handleDelete}
                 className="w-full px-4 py-2 bg-red-900/50 hover:bg-red-900 text-red-300 rounded-lg transition-colors text-sm"
               >
-                画像を削除
+                {t('deleteImage')}
               </button>
             </div>
           </div>

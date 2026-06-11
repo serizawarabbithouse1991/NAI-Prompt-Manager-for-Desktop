@@ -43,8 +43,19 @@ export async function getAllImages(): Promise<ImageWithDetails[]> {
     ORDER BY created_at DESC
   `)
 
-  // Get all prompts
-  const prompts = await database.select<Prompt[]>(`SELECT * FROM prompts`)
+  // Get all prompts.
+  // NOTE: We deliberately exclude `raw_metadata` here. It is a large JSON blob
+  // (the original NovelAI PNG metadata) that is never displayed in the gallery,
+  // and selecting it for every row makes the tauri-plugin-sql IPC payload huge.
+  // Worse, legacy rows can contain control/NULL bytes that stall JSON
+  // serialization, which is why this query (and the gallery) appeared to hang
+  // forever on "読み込み中...". Fetch only the columns the UI actually uses.
+  const prompts = await database.select<Prompt[]>(`
+    SELECT id, image_id, positive_prompt, negative_prompt, model, sampler, steps,
+           cfg_scale, seed, resolution_width, resolution_height, noise_schedule,
+           prompt_guidance_rescale, notes, created_at
+    FROM prompts
+  `)
   const promptMap = new Map(prompts.map(p => [p.image_id, p]))
 
   // Get all image tags with tag details
@@ -71,6 +82,16 @@ export async function getAllImages(): Promise<ImageWithDetails[]> {
     tags: imageTagsMap.get(img.id) || [],
     rating: ratingMap.get(img.id) || null,
   }))
+}
+
+export async function findImageByHash(fileHash: string): Promise<boolean> {
+  if (!fileHash) return false
+  const database = await getDatabase()
+  const rows = await database.select<{ id: string }[]>(
+    `SELECT id FROM images WHERE file_hash = $1 AND deleted_at IS NULL LIMIT 1`,
+    [fileHash]
+  )
+  return rows.length > 0
 }
 
 export async function createImage(
@@ -223,6 +244,45 @@ export async function createTag(name: string, color?: string): Promise<Tag> {
   return tag
 }
 
+export async function getOrCreateTags(
+  tagSeeds: { name: string; color?: string | null }[]
+): Promise<Tag[]> {
+  const database = await getDatabase()
+  const uniqueSeeds = new Map<string, { name: string; color?: string | null }>()
+  for (const seed of tagSeeds) {
+    const name = seed.name.trim()
+    if (name && !uniqueSeeds.has(name)) uniqueSeeds.set(name, { ...seed, name })
+  }
+  const seeds = [...uniqueSeeds.values()]
+  if (seeds.length === 0) return []
+
+  const existing = new Map<string, Tag>()
+  for (let i = 0; i < seeds.length; i += 500) {
+    const chunk = seeds.slice(i, i + 500)
+    const placeholders = chunk.map((_, index) => `$${index + 1}`).join(', ')
+    const rows = await database.select<Tag[]>(
+      `SELECT * FROM tags WHERE name IN (${placeholders})`,
+      chunk.map((seed) => seed.name)
+    )
+    for (const tag of rows) existing.set(tag.name, tag)
+  }
+
+  for (const seed of seeds) {
+    if (existing.has(seed.name)) continue
+    const id = crypto.randomUUID()
+    await database.execute(
+      `INSERT OR IGNORE INTO tags (id, name, color) VALUES ($1, $2, $3)`,
+      [id, seed.name, seed.color || '#a78bfa']
+    )
+    const [tag] = await database.select<Tag[]>(`SELECT * FROM tags WHERE name = $1`, [seed.name])
+    if (tag) existing.set(tag.name, tag)
+  }
+
+  return seeds
+    .map((seed) => existing.get(seed.name))
+    .filter((tag): tag is Tag => Boolean(tag))
+}
+
 export async function updateTag(id: string, updates: Partial<Tag>): Promise<void> {
   const database = await getDatabase()
   const fields: string[] = []
@@ -256,6 +316,28 @@ export async function addTagToImage(imageId: string, tagId: string): Promise<voi
   await database.execute(`
     INSERT OR IGNORE INTO image_tags (image_id, tag_id) VALUES ($1, $2)
   `, [imageId, tagId])
+}
+
+export async function addTagsToImage(imageId: string, tagIds: string[]): Promise<void> {
+  if (tagIds.length === 0) return
+  const database = await getDatabase()
+  for (const tagId of tagIds) {
+    await database.execute(
+      `INSERT OR IGNORE INTO image_tags (image_id, tag_id) VALUES ($1, $2)`,
+      [imageId, tagId]
+    )
+  }
+}
+
+export async function addTagToImages(imageIds: string[], tagId: string): Promise<void> {
+  if (imageIds.length === 0) return
+  const database = await getDatabase()
+  for (const imageId of imageIds) {
+    await database.execute(
+      `INSERT OR IGNORE INTO image_tags (image_id, tag_id) VALUES ($1, $2)`,
+      [imageId, tagId]
+    )
+  }
 }
 
 export async function removeTagFromImage(imageId: string, tagId: string): Promise<void> {
@@ -444,8 +526,12 @@ export async function searchImages(
 
   const idPlaceholders = imageIds.map((_, i) => `$${i + 1}`).join(', ')
   
+  // Exclude `raw_metadata` (large, unused in UI) — see note in getAllImages.
   const prompts = await database.select<Prompt[]>(
-    `SELECT * FROM prompts WHERE image_id IN (${idPlaceholders})`,
+    `SELECT id, image_id, positive_prompt, negative_prompt, model, sampler, steps,
+            cfg_scale, seed, resolution_width, resolution_height, noise_schedule,
+            prompt_guidance_rescale, notes, created_at
+     FROM prompts WHERE image_id IN (${idPlaceholders})`,
     imageIds
   )
   const promptMap = new Map(prompts.map(p => [p.image_id, p]))

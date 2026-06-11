@@ -1,7 +1,15 @@
+import { useState } from 'react'
 import { useAppStore } from '../../stores/appStore'
+import { useImageStore } from '../../stores/imageStore'
+import { useFolderStore } from '../../stores/folderStore'
+import { useTagStore } from '../../stores/tagStore'
+import type { ImageWithDetails } from '../../types'
+import { exportImageFilesToFolder } from '../../lib/export'
+import { useI18n } from '../../lib/i18n'
 
 interface ViewControlsProps {
   imageCount: number
+  images: ImageWithDetails[]
   onUpload: () => void
   batchMode: boolean
   onToggleBatchMode: () => void
@@ -12,6 +20,7 @@ interface ViewControlsProps {
 
 export default function ViewControls({
   imageCount,
+  images,
   onUpload,
   batchMode,
   onToggleBatchMode,
@@ -28,7 +37,78 @@ export default function ViewControls({
     setSortOrder,
     setSearchQuery,
     setFavoritesOnly,
+    selectedImageIds,
+    clearSelection,
   } = useAppStore()
+  const { deleteImages, moveToFolder, addTagToImages } = useImageStore()
+  const { folders } = useFolderStore()
+  const { tags } = useTagStore()
+  const [exporting, setExporting] = useState(false)
+  const [exportMessage, setExportMessage] = useState<string | null>(null)
+  const { t } = useI18n()
+
+  const selectedIds = () => Array.from(selectedImageIds)
+  const selectedImages = () => {
+    const ids = new Set(selectedIds())
+    return images.filter((image) => ids.has(image.id))
+  }
+
+  const handleBatchDelete = async () => {
+    const ids = selectedIds()
+    if (ids.length === 0) return
+    if (!confirm(`選択した ${ids.length} 件の画像を削除しますか？`)) return
+    try {
+      await deleteImages(ids)
+      clearSelection()
+    } catch (err) {
+      console.error('Batch delete failed:', err)
+    }
+  }
+
+  const handleBatchMove = async (value: string) => {
+    const ids = selectedIds()
+    if (ids.length === 0) return
+    try {
+      await moveToFolder(ids, value === 'uncategorized' ? null : value)
+      clearSelection()
+    } catch (err) {
+      console.error('Batch move failed:', err)
+    }
+  }
+
+  const handleBatchTag = async (tagId: string) => {
+    const ids = selectedIds()
+    const tag = tags.find((t) => t.id === tagId)
+    if (ids.length === 0 || !tag) return
+    try {
+      await addTagToImages(ids, tag)
+    } catch (err) {
+      console.error('Batch tag failed:', err)
+    }
+  }
+
+  const handleExportImages = async (targets: ImageWithDetails[]) => {
+    if (targets.length === 0) return
+    setExporting(true)
+    setExportMessage(t('exporting'))
+    try {
+      const result = await exportImageFilesToFolder(targets)
+      if (!result.destination) {
+        setExportMessage(null)
+        return
+      }
+      setExportMessage(
+        result.failed > 0
+          ? t('exportDoneWithFailed', { count: result.exported, failed: result.failed })
+          : t('exportDone', { count: result.exported })
+      )
+    } catch (err) {
+      console.error('Batch image export failed:', err)
+      setExportMessage(t('exportFailed'))
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <div className="shrink-0 p-3 border-b border-nai-border bg-nai-bg1/50">
@@ -40,7 +120,7 @@ export default function ViewControls({
           </svg>
           <input
             type="text"
-            placeholder="検索..."
+            placeholder={t('search')}
             value={filterOptions.searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-nai-bg0 border border-nai-border text-nai-text placeholder-nai-text-placeholder focus:outline-none focus:border-nai-accent rounded-lg text-sm"
@@ -59,12 +139,12 @@ export default function ViewControls({
             }}
             className="px-3 py-2 bg-nai-bg0 text-nai-text text-sm rounded-lg border border-nai-border focus:outline-none focus:border-nai-accent"
           >
-            <option value="date-desc">新しい順</option>
-            <option value="date-asc">古い順</option>
-            <option value="name-asc">名前 A→Z</option>
-            <option value="name-desc">名前 Z→A</option>
-            <option value="size-desc">サイズ大</option>
-            <option value="size-asc">サイズ小</option>
+            <option value="date-desc">{t('newest')}</option>
+            <option value="date-asc">{t('oldest')}</option>
+            <option value="name-asc">{t('nameAsc')}</option>
+            <option value="name-desc">{t('nameDesc')}</option>
+            <option value="size-desc">{t('sizeDesc')}</option>
+            <option value="size-asc">{t('sizeAsc')}</option>
           </select>
 
           {/* Favorites filter */}
@@ -75,7 +155,7 @@ export default function ViewControls({
                 : 'bg-nai-bg0 text-nai-text-muted hover:bg-nai-bg2 border border-nai-border'
             }`}
             onClick={() => setFavoritesOnly(!filterOptions.favoritesOnly)}
-            title="お気に入りのみ"
+            title={t('favoritesOnly')}
           >
             <svg className={`w-4 h-4 ${filterOptions.favoritesOnly ? 'fill-current' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
@@ -94,7 +174,7 @@ export default function ViewControls({
                   : 'text-nai-text-muted hover:bg-nai-bg2'
               }`}
               onClick={() => setViewMode('grid')}
-              title="グリッド表示"
+              title={t('gridView')}
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M3 3h7v7H3V3zm0 11h7v7H3v-7zm11-11h7v7h-7V3zm0 11h7v7h-7v-7z" />
@@ -107,7 +187,7 @@ export default function ViewControls({
                   : 'text-nai-text-muted hover:bg-nai-bg2'
               }`}
               onClick={() => setViewMode('list')}
-              title="リスト表示"
+              title={t('listView')}
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z" />
@@ -142,6 +222,19 @@ export default function ViewControls({
           {/* Divider */}
           <div className="w-px h-6 bg-nai-border" />
 
+          {/* Export visible images */}
+          <button
+            onClick={() => handleExportImages(images)}
+            disabled={exporting || images.length === 0}
+            className="px-3 py-2 bg-nai-bg0 hover:bg-nai-bg2 disabled:opacity-50 text-nai-text-muted rounded-lg border border-nai-border transition-colors flex items-center gap-2 text-sm"
+            title={t('exportVisible')}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M12 4v10m0 0l-4-4m4 4l4-4" />
+            </svg>
+            <span className="hidden lg:inline">{exporting ? t('exporting') : t('exportVisible')}</span>
+          </button>
+
           {/* Batch mode */}
           <button
             className={`px-3 py-2 text-sm rounded-lg transition-colors flex items-center gap-2 ${
@@ -154,7 +247,7 @@ export default function ViewControls({
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
-            <span className="hidden lg:inline">{batchMode ? '選択終了' : '複数選択'}</span>
+            <span className="hidden lg:inline">{batchMode ? t('batchEnd') : t('batchStart')}</span>
           </button>
 
           {/* Upload button */}
@@ -165,35 +258,89 @@ export default function ViewControls({
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            <span className="hidden sm:inline">アップロード</span>
+            <span className="hidden sm:inline">{t('upload')}</span>
           </button>
         </div>
       </div>
 
       {/* Batch actions */}
       {batchMode && selectedCount > 0 && (
-        <div className="flex items-center gap-3 mt-3 p-3 bg-nai-bg2 rounded-lg">
-          <span className="text-nai-text text-sm">{selectedCount}件選択中</span>
+        <div className="flex flex-wrap items-center gap-2 mt-3 p-3 bg-nai-bg2 rounded-lg">
+          <span className="text-nai-text text-sm">{t('selectedCount', { count: selectedCount })}</span>
+
+          {/* Add tag to selection */}
+          {tags.length > 0 && (
+            <select
+              className="px-2 py-1.5 bg-nai-bg0 text-nai-text-muted rounded text-sm border border-nai-border focus:outline-none focus:border-nai-accent"
+              onChange={(e) => {
+                if (e.target.value) {
+                  handleBatchTag(e.target.value)
+                  e.target.value = ''
+                }
+              }}
+              defaultValue=""
+            >
+              <option value="" disabled>{t('addTag')}</option>
+              {tags.map((tag) => (
+                <option key={tag.id} value={tag.id}>{tag.name}</option>
+              ))}
+            </select>
+          )}
+
+          {/* Move selection to folder */}
+          <select
+            className="px-2 py-1.5 bg-nai-bg0 text-nai-text-muted rounded text-sm border border-nai-border focus:outline-none focus:border-nai-accent"
+            onChange={(e) => {
+              if (e.target.value) {
+                handleBatchMove(e.target.value)
+                e.target.value = ''
+              }
+            }}
+            defaultValue=""
+          >
+            <option value="" disabled>{t('moveToFolder')}</option>
+            <option value="uncategorized">{t('uncategorized')}</option>
+            {folders.map((folder) => (
+              <option key={folder.id} value={folder.id}>{folder.name}</option>
+            ))}
+          </select>
+
+          {/* Delete selection */}
+          <button
+            onClick={() => handleExportImages(selectedImages())}
+            disabled={exporting}
+            className="px-3 py-1.5 text-sm bg-nai-bg0 hover:bg-nai-bg3 disabled:opacity-50 text-nai-text rounded transition-colors border border-nai-border"
+          >
+            {exporting ? t('exporting') : t('export')}
+          </button>
+
+          <button
+            onClick={handleBatchDelete}
+            className="px-3 py-1.5 text-sm bg-red-900/50 hover:bg-red-900 text-red-300 rounded transition-colors"
+          >
+            {t('delete')}
+          </button>
+
           <div className="flex-1" />
           <button
             onClick={onSelectAll}
             className="px-3 py-1.5 text-sm text-nai-text-muted hover:text-nai-text hover:bg-nai-bg3 rounded transition-colors"
           >
-            すべて選択
+            {t('selectAll')}
           </button>
           <button
             onClick={onClearSelection}
             className="px-3 py-1.5 text-sm text-nai-text-muted hover:text-nai-text hover:bg-nai-bg3 rounded transition-colors"
           >
-            選択解除
+            {t('clearSelection')}
           </button>
-          {/* TODO: Add batch actions (delete, add tag, move to folder, etc.) */}
         </div>
       )}
 
       {/* Image count */}
       <div className="mt-2 text-xs text-nai-text-muted">
-        {imageCount}件の画像
+        {t('imageCount', { count: imageCount })}
+        {exportMessage && <span className="ml-3 text-nai-accent">{exportMessage}</span>}
       </div>
     </div>
   )

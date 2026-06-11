@@ -57,6 +57,18 @@ const defaultSettings: AppSettings = {
   autoBackupEnabled: false,
   backupPath: null,
   theme: 'dark',
+  language: 'ja',
+  danbooruDbPath: '',
+  danbooruAutoTagEnabled: false,
+  danbooruAllowedTagTypes: [0, 1, 3, 4, 5],
+  danbooruMaxTagsPerImage: 80,
+  danbooruMinPopularity: 0,
+  importMirrorEnabled: true,
+  importMirrorPath: 'C:\\Users\\rt032\\iCloudDrive\\NovelAI',
+  icloudSyncEnabled: false,
+  icloudSyncPath: 'C:\\Users\\rt032\\iCloudDrive\\NAI-Prompt-Manager',
+  icloudSyncDeviceId: '',
+  icloudSyncLastSyncedAt: null,
 }
 
 export const useAppStore = create<AppState>()(
@@ -127,6 +139,17 @@ export const useAppStore = create<AppState>()(
         viewOptions: state.viewOptions,
         settings: state.settings,
       }),
+      merge: (persisted, current) => {
+        const persistedState = persisted as Partial<AppState> | undefined
+        return {
+          ...current,
+          ...persistedState,
+          settings: {
+            ...current.settings,
+            ...persistedState?.settings,
+          },
+        }
+      },
     }
   )
 )

@@ -56,6 +56,17 @@ export interface Tag {
   created_at: string
 }
 
+export interface DanbooruTagMatch {
+  name: string
+  tag_type: number
+  popularity: number
+}
+
+export interface DanbooruDbStats {
+  total_tags: number
+  type_counts: Record<string, number>
+}
+
 export interface ImageTag {
   image_id: string
   tag_id: string
@@ -85,6 +96,7 @@ export type ViewMode = 'grid' | 'list'
 export type ThumbnailSize = 'small' | 'medium' | 'large' | 'xlarge'
 export type SortBy = 'date' | 'name' | 'size'
 export type SortOrder = 'asc' | 'desc'
+export type AppLanguage = 'ja' | 'en' | 'zh'
 
 export interface ViewOptions {
   mode: ViewMode
@@ -148,6 +160,18 @@ export interface AppSettings {
   autoBackupEnabled: boolean
   backupPath: string | null
   theme: 'dark' | 'light'
+  language: AppLanguage
+  danbooruDbPath: string
+  danbooruAutoTagEnabled: boolean
+  danbooruAllowedTagTypes: number[]
+  danbooruMaxTagsPerImage: number
+  danbooruMinPopularity: number
+  importMirrorEnabled: boolean
+  importMirrorPath: string
+  icloudSyncEnabled: boolean
+  icloudSyncPath: string
+  icloudSyncDeviceId: string
+  icloudSyncLastSyncedAt: string | null
 }
 
 // ============================================

@@ -12,7 +12,11 @@ interface ImageCardProps {
 
 export default function ImageCard({ image, viewMode, thumbnailSize = 'medium', onClick }: ImageCardProps) {
   const { batchMode, selectedImageIds, toggleImageSelection } = useAppStore()
-  const [imageError, setImageError] = useState(false)
+  // Staged loading: try the thumbnail first, fall back to the full-size file if
+  // the thumbnail is missing/corrupt, and only show a placeholder if both fail.
+  const [stage, setStage] = useState<'thumb' | 'full' | 'error'>(
+    image.thumbnail_path ? 'thumb' : 'full'
+  )
   const isSelected = selectedImageIds.has(image.id)
 
   const handleClick = (e: React.MouseEvent) => {
@@ -24,12 +28,16 @@ export default function ImageCard({ image, viewMode, thumbnailSize = 'medium', o
     }
   }
 
+  const handleImageError = () =>
+    setStage((prev) => (prev === 'thumb' ? 'full' : 'error'))
+
   // Get image URL (for local files, use Tauri asset protocol)
-  const imageUrl = imageError 
-    ? '' 
-    : (image.thumbnail_path 
-        ? pathToAssetUrl(image.thumbnail_path)
-        : pathToAssetUrl(image.file_path))
+  const imageError = stage === 'error'
+  const imageUrl = imageError
+    ? ''
+    : stage === 'thumb' && image.thumbnail_path
+      ? pathToAssetUrl(image.thumbnail_path)
+      : pathToAssetUrl(image.file_path)
 
   if (viewMode === 'list') {
     return (
@@ -59,7 +67,7 @@ export default function ImageCard({ image, viewMode, thumbnailSize = 'medium', o
               src={imageUrl}
               alt={image.filename || 'Image'}
               className="w-full h-full object-cover"
-              onError={() => setImageError(true)}
+              onError={handleImageError}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center">
@@ -150,7 +158,7 @@ export default function ImageCard({ image, viewMode, thumbnailSize = 'medium', o
           src={imageUrl}
           alt={image.filename || 'Image'}
           className="w-full h-full object-cover"
-          onError={() => setImageError(true)}
+          onError={handleImageError}
           loading="lazy"
         />
       ) : (

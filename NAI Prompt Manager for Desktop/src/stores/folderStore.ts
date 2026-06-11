@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Folder, FolderWithChildren } from '../types'
 import * as db from '../lib/database'
+import { notifyFolderDeleted, notifyFolderSynced } from '../lib/icloud-sync'
 
 interface FolderState {
   folders: Folder[]
@@ -76,6 +77,7 @@ export const useFolderStore = create<FolderState>((set, get) => ({
       const folders = [...get().folders, folder]
       const folderTree = buildFolderTree(folders)
       set({ folders, folderTree })
+      void notifyFolderSynced(folder, 'create')
       return folder
     } catch (err) {
       console.error('Failed to create folder:', err)
@@ -86,11 +88,13 @@ export const useFolderStore = create<FolderState>((set, get) => ({
   updateFolder: async (id, updates) => {
     try {
       await db.updateFolder(id, updates)
+      const current = get().folders.find((f) => f.id === id)
       const folders = get().folders.map((f) =>
         f.id === id ? { ...f, ...updates } : f
       )
       const folderTree = buildFolderTree(folders)
       set({ folders, folderTree })
+      if (current) void notifyFolderSynced({ ...current, ...updates })
     } catch (err) {
       console.error('Failed to update folder:', err)
       throw err
@@ -103,6 +107,7 @@ export const useFolderStore = create<FolderState>((set, get) => ({
       const folders = get().folders.filter((f) => f.id !== id)
       const folderTree = buildFolderTree(folders)
       set({ folders, folderTree })
+      void notifyFolderDeleted(id)
     } catch (err) {
       console.error('Failed to delete folder:', err)
       throw err

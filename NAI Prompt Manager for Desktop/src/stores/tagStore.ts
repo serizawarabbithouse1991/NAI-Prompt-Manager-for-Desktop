@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Tag } from '../types'
 import * as db from '../lib/database'
+import { notifyTagDeleted, notifyTagSynced } from '../lib/icloud-sync'
 
 interface TagState {
   tags: Tag[]
@@ -13,7 +14,7 @@ interface TagState {
   deleteTag: (id: string) => Promise<void>
 }
 
-export const useTagStore = create<TagState>((set) => ({
+export const useTagStore = create<TagState>((set, get) => ({
   tags: [],
   loading: false,
   error: null,
@@ -36,6 +37,7 @@ export const useTagStore = create<TagState>((set) => ({
     try {
       const tag = await db.createTag(name, color)
       set((state) => ({ tags: [...state.tags, tag] }))
+      void notifyTagSynced(tag, 'create')
       return tag
     } catch (err) {
       console.error('Failed to create tag:', err)
@@ -46,9 +48,11 @@ export const useTagStore = create<TagState>((set) => ({
   updateTag: async (id, updates) => {
     try {
       await db.updateTag(id, updates)
+      const updated = get().tags.find((t) => t.id === id)
       set((state) => ({
         tags: state.tags.map((t) => (t.id === id ? { ...t, ...updates } : t)),
       }))
+      if (updated) void notifyTagSynced({ ...updated, ...updates })
     } catch (err) {
       console.error('Failed to update tag:', err)
       throw err
@@ -59,6 +63,7 @@ export const useTagStore = create<TagState>((set) => ({
     try {
       await db.deleteTag(id)
       set((state) => ({ tags: state.tags.filter((t) => t.id !== id) }))
+      void notifyTagDeleted(id)
     } catch (err) {
       console.error('Failed to delete tag:', err)
       throw err

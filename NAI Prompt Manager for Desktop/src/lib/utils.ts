@@ -103,11 +103,11 @@ export function fileUrlToPath(url: string): string {
 }
 
 /**
- * Convert path to asset URL for Tauri
+ * Convert path to asset URL for Tauri (v2 uses convertFileSrc)
  */
+import { convertFileSrc } from '@tauri-apps/api/core'
 export function pathToAssetUrl(path: string): string {
-  // Tauri v2 uses asset protocol
-  return `asset://localhost/${encodeURIComponent(path)}`
+  return convertFileSrc(path)
 }
 
 /**
