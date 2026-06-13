@@ -65,6 +65,7 @@ npm run tauri:build
 
 このプロジェクトは Tauri v2 ベースなので、同じ React 画面を iOS アプリとして利用できます。
 iOS のプロジェクト生成・実機起動・署名は macOS + Xcode が必要です。
+Windows では Tauri CLI の `ios` サブコマンドが利用できないため、以下の `ios:*` コマンドはMac上で実行してください。
 
 ### 必要環境
 
